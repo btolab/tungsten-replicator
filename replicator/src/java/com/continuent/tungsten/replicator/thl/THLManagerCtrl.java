@@ -1,6 +1,6 @@
 /**
- * VMware Continuent Tungsten Replicator
- * Copyright (C) 2015 VMware, Inc. All rights reserved.
+ * tungsten Replicator
+ * Copyright (C) 2015 Continuent Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -82,7 +82,7 @@ public class THLManagerCtrl
 
     /**
      * Maximum length of characters to print out for a BLOB. If BLOB is larger,
-     * it is truncated and "<...>" is added to the end.<br/>
+     * it is truncated and "<...>" is added to the end.<br>
      */
     private static final int      maxBlobPrintLength = 1000;
     protected static ArgvIterator argvIterator       = null;
@@ -92,6 +92,12 @@ public class THLManagerCtrl
     private DiskLog               diskLog;
 
     protected static SQLTypes     sqlTypes           = new SQLTypes();
+
+    /* Statistical info for size output */
+
+    private Long eventTotalChunks = 0L;
+    private Long eventTotalBytes = 0L;
+    private Long eventTotalRows = 0L;
 
     /**
      * Creates a new <code>THLManagerCtrl</code> object.
@@ -362,7 +368,7 @@ public class THLManagerCtrl
      */
     public void listEvents(Long low, Long high, Long by, boolean pureSQL,
             boolean headersOnly, boolean json, String charset, boolean hex,
-            boolean specs) throws ReplicatorException, InterruptedException
+                           boolean specs, Integer sizes) throws ReplicatorException, InterruptedException
     {
         // Make sure range is OK.
         if (low != null && high != null && low > high)
@@ -421,7 +427,13 @@ public class THLManagerCtrl
                 }
             };
             conn.setReadFilter(filter);
+
         }
+        
+        if (sizes == 1)
+            println("SEQ#\tFrag#\tTstamp");
+        if (sizes == 2)
+            println("SEQ#\tFrag#\tTstamp\t\t\tChunks\t\tSQL Data\t\t\t\tRow Data");
 
         // Iterate until we run out of sequence numbers.
         THLEvent thlEvent = null;
@@ -445,12 +457,27 @@ public class THLManagerCtrl
                 int format = 0;
                 if (json)
                     format = 1;
-                else if (headersOnly && !json)
+                else if (sizes > 0)
+                    format = 3;
+                else if (headersOnly && !json & !(sizes == 0))
                     format = 2;
-                printHeader(sb, thlEvent, format);
+
+                // Default sizes mode only outputs the first fragment header
+                if (sizes == 1)
+                    {
+                        if (thlEvent.getFragno() == 0)
+                            {
+                                printHeader(sb, thlEvent, format);
+                            }
+                    }
+                else
+                    {
+                        printHeader(sb, thlEvent, format);
+                    }
 
                 print(sb.toString());
             }
+
             if (!headersOnly)
             {
                 ReplEvent replEvent = thlEvent.getReplEvent();
@@ -458,8 +485,12 @@ public class THLManagerCtrl
                 {
                     ReplDBMSEvent event = (ReplDBMSEvent) replEvent;
                     StringBuilder sb = new StringBuilder();
-                    printReplDBMSEvent(sb, event, pureSQL, charset, hex, specs);
-                    print(sb.toString());
+                    if (sizes > 0)
+                        printReplDBMSEventSize(sb, thlEvent, event, sizes);
+                    else
+                        printReplDBMSEvent(sb, event, pureSQL, charset, hex, specs);
+                    if (sb.length() > 0)
+                        println(sb.toString());
                 }
                 else
                 {
@@ -538,6 +569,15 @@ public class THLManagerCtrl
             stringBuilder.append("\"\n");
             stringBuilder.append("}");
         }
+        else if (format == 3)
+        {
+            stringBuilder.append(thlEvent.getSeqno());
+            stringBuilder.append("\t");
+            stringBuilder.append(thlEvent.getFragno());
+            stringBuilder.append("\t");
+            stringBuilder.append(thlEvent.getSourceTstamp());
+            stringBuilder.append("\t");
+        }
         else if (format == 2)
         {
             stringBuilder.append(thlEvent.getSeqno());
@@ -593,6 +633,130 @@ public class THLManagerCtrl
         println(stringBuilder, "- TIME = "
                 + event.getDBMSEvent().getSourceTstamp());
         println(stringBuilder, "- SOURCEID = " + event.getSourceId());
+    }
+
+    public void printReplDBMSEventSize(StringBuilder stringBuilder,
+                                       THLEvent thlEvent, ReplDBMSEvent event, Integer sizes)
+    {
+        if (event == null)
+        {
+            println(stringBuilder, "- TYPE = null");
+            return;
+        }
+
+        if (event.getDBMSEvent() instanceof DBMSEmptyEvent)
+        {
+            println(stringBuilder, "## Empty event ##");
+            return;
+        }
+
+        if (event instanceof ReplDBMSFilteredEvent)
+        {
+            println(stringBuilder, "## Filtered events ##");
+            return;
+        }
+
+        ArrayList<DBMSData> data = event.getData();
+
+        if (sizes == 2)
+            {
+                stringBuilder.append(data.size() + " chunks\t");
+            }
+
+        if (thlEvent.getFragno() == 0)
+            {
+                eventTotalChunks = 0L;
+                eventTotalBytes = 0L;
+                eventTotalRows = 0L;
+            }
+
+        eventTotalChunks = eventTotalChunks + data.size();
+
+        Integer totalrows = 0;
+        Integer rowdatacount = 0;
+        Integer totalbytes = 0;
+        Integer sqldatacount = 0;
+
+        String lastSchema = null;
+        for (int i = 0; i < data.size(); i++)
+        {
+            DBMSData dataElem = data.get(i);
+            if (dataElem instanceof RowChangeData)
+            {
+                RowChangeData rowChange = (RowChangeData) dataElem;
+
+                for (OneRowChange oneRowChange : rowChange.getRowChanges())
+                    {
+                        ArrayList<ArrayList<OneRowChange.ColumnVal>> keyValues = oneRowChange
+                            .getKeyValues();
+                        ArrayList<ArrayList<OneRowChange.ColumnVal>> columnValues = oneRowChange
+                            .getColumnValues();
+
+                        int rows = columnValues.size();
+                        if (rows == 0)
+                            rows = keyValues.size();
+                        totalrows += rows;
+                        rowdatacount++;
+                    }
+            }
+            else if (dataElem instanceof StatementData)
+            {
+                StatementData statement = (StatementData) dataElem;
+
+                String query = statement.getQuery();
+
+                if (query == null)
+                    query = new String(statement.getQueryAsBytes());
+
+                totalbytes = query.length();
+                sqldatacount++;
+            }
+            else if (dataElem instanceof RowIdData)
+            {
+                RowIdData rowid = (RowIdData) dataElem;
+            }
+            else if (dataElem instanceof LoadDataFileFragment)
+            {
+                LoadDataFileFragment loadDataFileFragment = (LoadDataFileFragment) dataElem;
+                String schema = loadDataFileFragment.getDefaultSchema();
+                printSchema(stringBuilder, schema, lastSchema, false);
+                lastSchema = schema;
+                println("- DATA FILE #" + loadDataFileFragment.getFileID()
+                        + " / size : " + loadDataFileFragment.getData().length);
+            }
+            else
+                println(stringBuilder, "# " + dataElem.getClass().getName()
+                        + ": not supported.");
+        }
+
+        Integer rowavg = 0;
+        if (rowdatacount > 0)
+            rowavg = totalrows/rowdatacount;
+        Integer sqlavg = 0;
+        if (sqldatacount > 0)
+            sqlavg = totalbytes/sqldatacount;
+
+        // Output the detailed stats for this fragment
+        if (sizes == 2)
+            {
+                stringBuilder.append("SQL " + totalbytes + " bytes (" + sqlavg + " avg bytes per chunk)\t" + 
+                                     "Rows " + totalrows + " (" + rowavg + " avg rows per chunk)");
+            }
+
+        eventTotalBytes  = eventTotalBytes + totalbytes;
+        eventTotalRows   = eventTotalRows + totalrows;
+
+        if (thlEvent.getLastFrag())
+            {
+                // When outputting detailed stats, the event total goes on the next line
+                if (sizes == 2)
+                    {
+                        stringBuilder.append("\n\t\t");
+                    }
+                stringBuilder.append("\tEvent total: " + eventTotalChunks + " chunks\t" +
+                        eventTotalBytes + " bytes in SQL statements\t" +
+                        eventTotalRows + " rows");
+            }
     }
 
     /**
@@ -940,19 +1104,33 @@ public class THLManagerCtrl
             Boolean specs = null;
             Boolean headersOnly = null;
             Boolean json = null;
+            Long lastseqno = 0L;
+            Long firstseqno = 0L;
             Boolean yesToQuestions = null;
             String fileName = null;
             String charsetName = null;
             boolean hex = false;
             boolean doChecksum = true;
             TimeZone timezone = TimeZone.getTimeZone("UTC");
+            Integer sizes = 0;
 
             // Parse command line arguments.
             ArgvIterator argvIterator = new ArgvIterator(argv);
             String curArg = null;
-            while (argvIterator.hasNext())
+
+            // True if the arguments need to be reprocessed 
+            Boolean reprocess = false;
+
+            while (argvIterator.hasNext() || reprocess)
             {
-                curArg = argvIterator.next();
+                // Only get the current argument again if we aren't reprocessing an argument
+                if (reprocess == false)
+                    curArg = argvIterator.next();
+
+                // If we're reprocessing, we can reset to false for this iteration
+                if (reprocess == true)
+                    reprocess = false;
+
                 if ("-conf".equals(curArg))
                     configFile = argvIterator.next();
                 else if ("-service".equals(curArg))
@@ -961,7 +1139,11 @@ public class THLManagerCtrl
                     seqno = Long.parseLong(argvIterator.next());
                 else if ("-low".equals(curArg))
                     low = Long.parseLong(argvIterator.next());
+                else if ("-from".equals(curArg))
+                    low = Long.parseLong(argvIterator.next());
                 else if ("-high".equals(curArg))
+                    high = Long.parseLong(argvIterator.next());
+                else if ("-to".equals(curArg))
                     high = Long.parseLong(argvIterator.next());
                 else if ("-by".equals(curArg))
                     by = Long.parseLong(argvIterator.next());
@@ -971,6 +1153,52 @@ public class THLManagerCtrl
                     specs = true;
                 else if ("-headers".equals(curArg))
                     headersOnly = true;
+                else if ("-last".equals(curArg))
+                    {
+                        if (argvIterator.hasNext())
+                        {
+                            curArg = argvIterator.next();
+                            // If the next argument can be converted to a number, use it, if not, reprocess
+                            try 
+                            {
+                                lastseqno = Long.parseLong(curArg);
+                            }
+                            catch (NumberFormatException e)
+                            {
+                                lastseqno = 1L;
+                                reprocess = true;
+                                continue;
+                            }
+                        }   
+                        else
+                            lastseqno = 1L;
+                    }
+                else if ("-first".equals(curArg))
+                    {
+                        if (argvIterator.hasNext())
+                        {
+                            curArg = argvIterator.next();
+                            // If the next argument can be converted to a number, use it, if not, reprocess
+                            try 
+                            {
+                                firstseqno = Long.parseLong(curArg);
+                            }
+                            catch (NumberFormatException e)
+                            {
+                                firstseqno = 1L;
+                                reprocess = true;
+                                continue;
+                            }
+                        }   
+                        else
+                            firstseqno = 1L;
+                    }
+                else if ("-sizes".equals(curArg))
+                    // Show basic sizes
+                    sizes = 1;
+                else if ("-sizesdetail".equals(curArg))
+                    // Show detailed sizes
+                    sizes = 2;
                 else if ("-json".equals(curArg))
                     json = true;
                 else if ("-y".equals(curArg))
@@ -1067,6 +1295,50 @@ public class THLManagerCtrl
                 }
             }
 
+            // Do the determination of the actual high/low numbers for selection so that they can be used
+            // with any command 
+
+            if ((firstseqno + lastseqno) > 0)
+            {
+                THLManagerCtrl thlManager = new THLManagerCtrl(configFile,
+                                                               doChecksum);
+                thlManager.prepare(true);
+                
+                InfoHolder info = thlManager.getInfo();
+                
+                if ((firstseqno > 0) && (lastseqno > 0))
+                    {
+                        logger.error("Invalid specification, cannot have -first and -last together");
+                        fail();
+                    }
+                
+                if (lastseqno > 0)
+                    {
+                        // We deal with ranges, so if you select the last 1, really 
+                        // the difference between first and last is 0 
+                        // So decrement first
+                        lastseqno--;
+                        low = info.getMaxSeqNo() - lastseqno;
+                        
+                        if (low < info.getMinSeqNo())
+                            low = info.getMinSeqNo();
+                        
+                        high = info.getMaxSeqNo();
+                    }
+                
+                if (firstseqno > 0)
+                    {
+                        firstseqno--;
+                        low = info.getMinSeqNo();
+                        
+                        high = info.getMinSeqNo() + firstseqno;
+                        
+                        if (high > info.getMaxSeqNo())
+                            high = info.getMaxSeqNo();
+                    }
+                thlManager.release();
+            }
+            
             if (THLCommands.INFO.equals(command))
             {
                 THLManagerCtrl thlManager = new THLManagerCtrl(configFile,
@@ -1094,18 +1366,21 @@ public class THLManagerCtrl
                 {
                     thlManager.listEvents(fileName, getBoolOrFalse(pureSQL),
                             getBoolOrFalse(headersOnly), getBoolOrFalse(json),
-                            charsetName, hex, getBoolOrFalse(specs));
+                            charsetName, hex, getBoolOrFalse(specs), 
+                            sizes);
                 }
                 else if (seqno == null)
                     thlManager.listEvents(low, high, by,
                             getBoolOrFalse(pureSQL),
                             getBoolOrFalse(headersOnly), getBoolOrFalse(json),
-                            charsetName, hex, getBoolOrFalse(specs));
+                            charsetName, hex, getBoolOrFalse(specs), 
+                            sizes);
                 else
                     thlManager.listEvents(seqno, seqno, by,
                             getBoolOrFalse(pureSQL),
                             getBoolOrFalse(headersOnly), getBoolOrFalse(json),
-                            charsetName, hex, getBoolOrFalse(specs));
+                            charsetName, hex, getBoolOrFalse(specs), 
+                            sizes);
             }
             else if (THLCommands.PURGE.equals(command))
             {
@@ -1253,7 +1528,7 @@ public class THLManagerCtrl
      */
     private void listEvents(String fileName, boolean pureSQL,
             boolean headersOnly, boolean json, String charset, boolean hex,
-            boolean specs) throws ReplicatorException, IOException,
+                            boolean specs, Integer sizes) throws ReplicatorException, IOException,
             InterruptedException
     {
         // Ensure we have a simple file name. Log APIs will not accept an
@@ -1290,12 +1565,27 @@ public class THLManagerCtrl
                 int format = 0;
                 if (json)
                     format = 1;
-                else if (headersOnly && !json)
+                else if (sizes > 0)
+                    format = 3;
+                else if (headersOnly && !json & !(sizes == 0))
                     format = 2;
-                printHeader(sb, thlEvent, format);
+
+                // In simple sizes mode, only the first event fragment info is printed
+                if (sizes == 1)
+                    {
+                        if (thlEvent.getFragno() == 0)
+                            {
+                                printHeader(sb, thlEvent, format);
+                            }
+                    }
+                else
+                    {
+                        printHeader(sb, thlEvent, format);
+                    }
 
                 print(sb.toString());
             }
+
             if (!headersOnly)
             {
                 ReplEvent replEvent = thlEvent.getReplEvent();
@@ -1303,8 +1593,12 @@ public class THLManagerCtrl
                 {
                     ReplDBMSEvent event = (ReplDBMSEvent) replEvent;
                     StringBuilder sb = new StringBuilder();
-                    printReplDBMSEvent(sb, event, pureSQL, charset, hex, specs);
-                    print(sb.toString());
+                    if (sizes > 0)
+                        printReplDBMSEventSize(sb, thlEvent, event, sizes);
+                    else
+                        printReplDBMSEvent(sb, event, pureSQL, charset, hex, specs);
+                    if (sb.length() > 0)
+                        print(sb.toString());
                 }
                 else
                 {
@@ -1335,22 +1629,26 @@ public class THLManagerCtrl
         println("  -conf path    - Path to a static-<svc>.properties file");
         println("  -service name - Name of a replication service");
         println("Commands and corresponding options:");
-        println("  list [-low #] [-high #] [-by #] - Dump THL events from low to high #");
-        println("  list [-seqno #]                 - Dump the exact event by a given #");
-        println("  list [-file <file_name>]        - Dump the content of the given log file");
-        println("       [-charset <charset>] [-hex]  Character set used for decoding row data");
-        println("       [-sql]                       Representative (no metadata!) SQL mode");
-        println("       [-specs]                     Add detailed column specifications");
-        println("       [-headers]                   Print headers only");
-        println("       [-json]                      Output in machine-parsable JSON format");
-        println("       [-no-checksum]               Suppress checksums");
-        println("       [-timezone timezone]         Time used zone for time-related data");
-        println("  index [-no-checksum]            - Display index of log files");
-        println("  purge [-low #] [-high #]        - Delete events identified by the given range from THL files");
-        println("        [-no-checksum] [-y]         Use -y to suppress prompt");
-        println("  info [-no-checksum]             - Display minimum, maximum sequence number");
-        println("                                    and other summary information about log");
-        println("  help                            - Print this help display");
+        println("  list  [-low|from #] [-high|to #] [-by #] - Dump THL events from low to high #");
+        println("  list  [-first [#]][-last [#]]            - Show the First/Last # events (default 1)");
+        println("  list  [-seqno #]                         - Dump the exact event by a given #");
+        println("  list  [-file <file_name>]                - Dump the content of the given log file");
+        println("        [-charset <charset>] [-hex]          Character set used for decoding row data");
+        println("        [-sql]                               Representative (no metadata!) SQL mode");
+        println("        [-specs]                             Add detailed column specifications");
+        println("        [-headers]                           Print headers only");
+        println("        [-json]                              Output in machine-parsable JSON format");
+        println("        [-no-checksum]                       Suppress checksums");
+        println("        [-timezone timezone]                 Time used zone for time-related data");
+        println("        [-sizes]                             Show THL event size in SQL/rows");
+        println("        [-sizesdetail]                       Show THL event and fragment size in SQL/rows");
+        println("  index [-no-checksum]                     - Display index of log files");
+        println("  purge [-low|from #] [-high|to #]         - Delete events identified by the given range from THL files");
+        println("        [-no-checksum] [-y]                  Use -y to suppress prompt");
+        println("        [-first [#]][-last [#]]            - Show the First/Last # events (default 1)");
+        println("  info  [-no-checksum]                     - Display minimum, maximum sequence number");
+        println("                                             and other summary information about log");
+        println("  help                                     - Print this help display");
     }
 
     /**

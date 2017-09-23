@@ -1,6 +1,6 @@
 #*
-	VMware Continuent Tungsten Replicator
-	Copyright (C) 2015 VMware, Inc. All rights reserved.
+	Tungsten Replicator
+	Copyright (C) 2015 Continuent Ltd. All rights reserved.
 
 	Licensed under the Apache License, Version 2.0 (the "License");
 	you may not use this file except in compliance with the License.
@@ -41,8 +41,8 @@ Options:
 #stop
 #end
 
-#if ( ! $hdfsStagingDir )
-#set ( $hdfsStagingDir = "/user/tungsten/staging" )
+#if ( ! $username )
+#set ( $username = "tungsten" )
 #end
 #if ( ! $schemaPrefix )
 #set ( $schemaPrefix = "" )
@@ -50,6 +50,11 @@ Options:
 #if ( ! $tablePrefix )
 #set ( $tablePrefix = "stage_xxx_" )
 #end
+#if ( ! $hdfsStagingDir )
+#set ( $hdfsStagingDir = "/user/$username/staging" )
+#end
+
+CREATE DATABASE IF NOT EXISTS ${schemaPrefix}${table.getSchema()};
 
 DROP TABLE IF EXISTS ##
 ${schemaPrefix}${table.getSchema()}.${tablePrefix}$table.getName()##
@@ -71,5 +76,5 @@ ${schemaPrefix}${table.getSchema()}.${tablePrefix}$table.getName()##
 ) 
 ROW FORMAT DELIMITED FIELDS TERMINATED BY '\001' ESCAPED BY '\\'
 LINES TERMINATED BY '\n'
-STORED AS TEXTFILE LOCATION '$hdfsStagingDir/$table.getSchema()/$table.getName()' ##
+STORED AS TEXTFILE LOCATION '$hdfsStagingDir/$table.getSchema()/$table.getName()/' ##
 ;

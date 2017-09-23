@@ -1,6 +1,6 @@
 /**
- * VMware Continuent Tungsten Replicator
- * Copyright (C) 2015 VMware, Inc. All rights reserved.
+ * Tungsten Replicator
+ * Copyright (C) 2015 Continuent Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -176,9 +176,9 @@ public class DsQueryCtrl
             }
             catch (SQLException e)
             {
-                System.out.println(e.getMessage());
+                System.out.println("ERROR Connecting: " + e.getMessage());
                 // Send the stack trace to SYSERR
-                e.printStackTrace();
+                // e.printStackTrace();
                 // Adn return the error code
                 System.exit(e.getErrorCode());
             }
@@ -234,7 +234,7 @@ public class DsQueryCtrl
                 }
                 catch (Exception e)
                 {
-                    e.printStackTrace();
+                    System.out.println("ERROR Executing: " + e.getMessage());
                 }
                 finally
                 {
@@ -246,7 +246,7 @@ public class DsQueryCtrl
         }
         catch (Exception e)
         {
-            e.printStackTrace();
+            System.out.println("ERROR: " + e.getMessage());
         }
     }
 

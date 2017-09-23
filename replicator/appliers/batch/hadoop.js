@@ -1,6 +1,6 @@
 /**
- * VMware Continuent Tungsten Replicator
- * Copyright (C) 2015 VMware, Inc. All rights reserved.
+ * Tungsten Replicator
+ * Copyright (C) 2015 Continuent Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,13 +24,18 @@
  *   /user/tungsten/staging/<service name>
  */
 
+var properties = null;
+var service_name = null;
+
 // Called once when applier goes online. 
 function prepare()
 {
   // Ensure target directory exists.  This must contain the service name. 
   logger.info("Executing hadoop connect script to create data directory");
+  properties = runtime.getContext().getReplicatorProperties();      
   service_name = runtime.getContext().getServiceName();
-  hadoop_base = '/user/tungsten/staging/' + service_name;
+  user_name = properties.getString('replicator.global.db.user');
+  hadoop_base = '/user/' + user_name + '/staging/' + service_name;
   runtime.exec('hadoop fs -mkdir -p ' + hadoop_base);
 }
 

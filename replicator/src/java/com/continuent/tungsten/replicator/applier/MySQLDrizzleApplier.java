@@ -1,6 +1,6 @@
 /**
- * VMware Continuent Tungsten Replicator
- * Copyright (C) 2015 VMware, Inc. All rights reserved.
+ * Tungsten Replicator
+ * Copyright (C) 2015 Continuent Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -297,7 +297,7 @@ public class MySQLDrizzleApplier extends MySQLApplier
             if (ts.getNanos() > 0)
             {
                 timeStampString.append(".");
-                timeStampString.append(String.format("%09d%n", ts.getNanos()));
+                timeStampString.append(String.format("%06d", ts.getNanos()));
             }
             prepStatement.setString(bindLoc, timeStampString.toString());
         }
@@ -312,7 +312,7 @@ public class MySQLDrizzleApplier extends MySQLApplier
             if (ts.getNanos() > 0)
             {
                 datetime.append(".");
-                datetime.append(String.format("%09d%n", ts.getNanos()));
+                datetime.append(String.format("%06d", ts.getNanos()));
             }
             prepStatement.setString(bindLoc, datetime.toString());
         }
@@ -331,12 +331,33 @@ public class MySQLDrizzleApplier extends MySQLApplier
             {
                 // This is a MySQL TIME field.
                 Timestamp timestamp = ((Timestamp) value.getValue());
-                StringBuffer time = new StringBuffer(
-                        timeFormatter.format(timestamp));
+                // Get the total number of seconds
+                boolean negative = timestamp.getTime() < 0;
+                
+                long timeAsLong;
+                if(negative)
+                    // This is the extra second to remove for near-0 negative values
+                    timeAsLong = (long)Math.floor(((double)timestamp.getTime() +1000L) / 1000);
+                else
+                    timeAsLong = (long)Math.floor((double)timestamp.getTime() / 1000);
+                    
+                long hoursAsLong = timeAsLong / 3600;
+                long remainingTime = timeAsLong % 3600;
+                long minutesAsLong = remainingTime / 60;
+                long seconds = remainingTime % 60;
+                    
+                StringBuffer time = new StringBuffer();
+                if (negative)
+                    time.append("-");
+                time.append(Math.abs(hoursAsLong));
+                time.append(":");
+                time.append(String.format("%02d", Math.abs(minutesAsLong)));
+                time.append(":");
+                time.append(String.format("%02d", Math.abs(seconds)));
                 if (timestamp.getNanos() > 0)
                 {
                     time.append(".");
-                    time.append(String.format("%09d%n", timestamp.getNanos()));
+                    time.append(String.format("%06d", timestamp.getNanos()/1000));
                 }
                 prepStatement.setString(bindLoc, time.toString());
             }

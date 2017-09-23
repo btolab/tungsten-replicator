@@ -1,6 +1,6 @@
 /**
- * VMware Continuent Tungsten Replicator
- * Copyright (C) 2015 VMware, Inc. All rights reserved.
+ * Tungsten Replicator
+ * Copyright (C) 2015 Continuent Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -719,15 +719,8 @@ public class ProtobufSerializer implements Serializer
                 {
                     Timestamp ts = (Timestamp) value;
                     time = ts.getTime();
-
-                    // Need to check whether timestamp is negative to compute
-                    // milliseconds
                     int millis = (int) (time % 1000);
-                    if (millis < 0)
-                        millis += 1000;
-
-                    int nanos = ts.getNanos() - (millis * 1000000);
-
+                    int nanos = ts.getNanos();
                     if (logger.isDebugEnabled())
                         logger.debug("Serializing TIME2 : " + ts + " - " + time
                                 + " - " + millis + " - " + nanos);
@@ -1026,10 +1019,7 @@ public class ProtobufSerializer implements Serializer
                     // This is time with microseconds (since MySQL 5.6)
                     // We need to use timestamps in order to save microseconds
                     Timestamp time = new Timestamp(columnVal.getLongValue());
-
-                    // When setting nanos, don't forget millis that are already
-                    // stored in timestamp object
-                    time.setNanos(time.getNanos() + columnVal.getIntValue());
+                    time.setNanos(columnVal.getIntValue());
                     return time;
                 }
                 else

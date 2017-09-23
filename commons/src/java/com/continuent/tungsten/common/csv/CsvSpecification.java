@@ -1,6 +1,6 @@
 /**
- * VMware Continuent Tungsten Replicator
- * Copyright (C) 2015 VMware, Inc. All rights reserved.
+ * Tungsten Replicator
+ * Copyright (C) 2015 Continuent Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -50,7 +50,7 @@ public class CsvSpecification
     /**
      * Returns a specification suitable for a particular DBMS store type.
      * Supported types include the following:
-     * <p/>
+     * <p>
      * <ul>
      * <li>default - Default settings</li>
      * <li>hive - Standard settings for Hadoop Hive external table</li>
@@ -114,6 +114,19 @@ public class CsvSpecification
             spec.setEscape("\\");
             spec.setEscapedChars("\\");
             spec.setNullPolicy(NullPolicy.skip);
+            spec.setUseHeaders(false);
+            spec.setUseQuotes(true);
+            spec.setQuote("\"");
+            spec.setSuppressedChars("\n");
+        }
+        else if ("cassandra".equals(type))
+        {
+            spec = new CsvSpecification();
+            spec.setFieldSeparator(",");
+            spec.setRecordSeparator("\n");
+            spec.setEscape("\\");
+            spec.setEscapedChars("\\");
+            spec.setNullValue("NULL");
             spec.setUseHeaders(false);
             spec.setUseQuotes(true);
             spec.setQuote("\"");

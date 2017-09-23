@@ -1,6 +1,6 @@
 #*
-	VMware Continuent Tungsten Replicator
-	Copyright (C) 2015 VMware, Inc. All rights reserved.
+	Tungsten Replicator
+	Copyright (C) 2015 Continuent Ltd. All rights reserved.
 
 	Licensed under the Apache License, Version 2.0 (the "License");
 	you may not use this file except in compliance with the License.
@@ -29,8 +29,9 @@ generally map to those used by Tungsten Replicator.
 Options: 
   -opt hdfsStagingDir - HDFS directory in which external tables are located
        (Defaults to /user/tungsten/staging)
-  -opt schemaPrefix - Prefix for schema name (Defaults to null)
-  -opt tablePrefix - Prefix for table name (Defaults to stage_xxx_)
+  -opt schemaPrefix  - Prefix for schema name (Defaults to null)
+  -opt tablePrefix   - Prefix for table name (Defaults to stage_xxx_)
+  -opt username      - Prefix for the username (defaults to tungsten)
 #else
 ##parse("includes/hive-reserved-words.vm")
 #parse("includes/ddl-header-dashed.vm")
@@ -41,15 +42,20 @@ Options:
 #stop
 #end
 
-#if ( ! $hdfsStagingDir )
-#set ( $hdfsStagingDir = "/user/tungsten/staging" )
-#end
 #if ( ! $schemaPrefix )
 #set ( $schemaPrefix = "" )
+#end
+#if ( ! $username )
+#set ( $username = "tungsten" )
 #end
 #if ( ! $tablePrefix )
 #set ( $tablePrefix = "stage_xxx_" )
 #end
+#if ( ! $hdfsStagingDir )
+#set ( $hdfsStagingDir = "/user/$username/staging" )
+#end
+
+CREATE DATABASE IF NOT EXISTS ${schemaPrefix}${table.getSchema()};
 
 DROP TABLE IF EXISTS ##
 ${schemaPrefix}${table.getSchema()}.${tablePrefix}$table.getName()##
@@ -71,5 +77,5 @@ ${schemaPrefix}${table.getSchema()}.${tablePrefix}$table.getName()##
 ) 
 ROW FORMAT DELIMITED FIELDS TERMINATED BY '\001' ESCAPED BY '\\'
 LINES TERMINATED BY '\n'
-STORED AS TEXTFILE LOCATION '$hdfsStagingDir/$table.getSchema()/$table.getName()' ##
+STORED AS TEXTFILE LOCATION '$hdfsStagingDir/$table.getSchema()/$table.getName()/' ##
 ;

@@ -21,13 +21,15 @@ set_tungsten_env() {
 
 	PREFERRED_PATH="@{PREFERRED_PATH}"
 	if [ "$PREFERRED_PATH" != "" ]; then
-		export PATH=${PREFERRED_PATH}:$PATH
+		 PATH=${PREFERRED_PATH}:$PATH
+		 export PATH
 	fi
 	
 	if [ -f $CONTINUENT_ROOT/share/aliases.sh ]; then
 		. $CONTINUENT_ROOT/share/aliases.sh
 	else
-		export PATH=$PATH:$CONTINUENT_ROOT/tungsten/tungsten-manager/bin:$CONTINUENT_ROOT/tungsten/tungsten-replicator/bin:$CONTINUENT_ROOT/tungsten/cluster-home/bin:$CONTINUENT_ROOT/tungsten/tungsten-connector/bin:$CONTINUENT_ROOT/share:$CONTINUENT_ROOT/tungsten/tools
+		PATH=$PATH:$CONTINUENT_ROOT/tungsten/tungsten-manager/bin:$CONTINUENT_ROOT/tungsten/tungsten-replicator/bin:$CONTINUENT_ROOT/tungsten/cluster-home/bin:$CONTINUENT_ROOT/tungsten/tungsten-connector/bin:$CONTINUENT_ROOT/share:$CONTINUENT_ROOT/tungsten/tools
+		export PATH
 	fi
 	
 	_cctrl()
@@ -53,7 +55,7 @@ set_tungsten_env() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
     trepctl_opts="-host -port -service -verbose -retry"
-    trepctl_commands="version services capabilities shutdown kill backup clear configure flush heartbeat offline offline-deferred online purge reset restore setrole start status stop wait check shard"
+    trepctl_commands="version services capabilities shutdown kill backup clear configure flush heartbeat offline offline-deferred online purge reset restore setrole start status stop wait check shard qs perf"
     trepctl_shutdown="-y"
     trepctl_kill="-y"
     trepctl_backup="-backup -storage -limit"
@@ -62,11 +64,13 @@ set_tungsten_env() {
     trepctl_offline="-immediate"
     trepctl_offline_deferred="-at-seqno -at-event -at-heartbeat"
     trepctl_online="-force -from-event -base-seqno -skip-seqno -until-seqno -until-event -until-heartbeat -until-time"
+    trepctl_perf="-r"
     trepctl_purge="-y -limit"
+    trepctl_qs="-r"
     trepctl_reset="-y"
     trepctl_restore="-uri -limit"
     trepctl_setrole="-role -uri"
-    trepctl_status="-name channel-assignments services shards stages stores tasks watches"
+    trepctl_status="-name channel-assignments services shards stages stores tasks watches -r"
     trepctl_stop="-y"
     trepctl_wait="-state -applied -limit"
     trepctl_check="-limit -method"
@@ -96,8 +100,8 @@ set_tungsten_env() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
     thl_options="-conf -service"
     thl_commands="list index purge info help"
-    thl_list="-low -high -by -sql -charset -hex -file"
-    thl_purge="-low -high -y -seqno"
+    thl_list="-low -high -by -sql -charset -hex -file -first -last -from -to -sizes -sizesdetail"
+    thl_purge="-low -high -y -seqno -from -to -last -first"
     
     if [ $COMP_CWORD -eq 1 ]; then
       COMPREPLY=( $(compgen -W "${thl_commands} ${thl_options}" -- ${cur}) )

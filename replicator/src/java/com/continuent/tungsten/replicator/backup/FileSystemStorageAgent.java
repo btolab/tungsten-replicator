@@ -1,6 +1,6 @@
 /**
- * VMware Continuent Tungsten Replicator
- * Copyright (C) 2015 VMware, Inc. All rights reserved.
+ * Tungsten Replicator
+ * Copyright (C) 2015 Continuent Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -514,9 +514,20 @@ public class FileSystemStorageAgent implements StorageAgent
         StorageIndex index = null;
         if (indexFile.exists())
         {
-            storageProps = loadProperties(indexFile,
-                    "Unable to load storage properties");
-            index = new StorageIndex(storageProps);
+            // If we couldn't read a valid number, either the file is not an
+            // an index file, or it's corrupt or empty, so we assume empty and recreate
+            try 
+            {
+                storageProps = loadProperties(indexFile,
+                                              "Unable to load storage properties");
+                index = new StorageIndex(storageProps);
+                
+            }
+            catch (NumberFormatException e)
+            {
+                logger.debug("Existing index information unreadable, assuming corrupt and recreating");
+                index = new StorageIndex();
+            }
         }
         else
         {
@@ -530,9 +541,18 @@ public class FileSystemStorageAgent implements StorageAgent
             index.setIndex(lastFileNumber + 1);
 
         // Write the file back to storage.
-        storageProps = index.toProperties();
-        storeProperties(indexFile, storageProps,
-                "Unable to write storage properties");
+        try
+        {
+            storageProps = index.toProperties();
+            storeProperties(indexFile, storageProps,
+                            "Unable to write storage properties");
+        }
+        catch(Exception e)
+        {
+                logger.debug("Existing index information unreadable, assuming corrupt and recreating");
+                throw new BackupException(
+                    "Unable to write storage index: " + indexFile);
+        }
 
         return index;
     }

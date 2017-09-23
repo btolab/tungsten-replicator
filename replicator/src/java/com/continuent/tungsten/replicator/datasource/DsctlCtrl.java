@@ -1,6 +1,6 @@
 /**
- * VMware Continuent Tungsten Replicator
- * Copyright (C) 2015 VMware, Inc. All rights reserved.
+ * Tungsten Replicator
+ * Copyright (C) 2015 Continuent Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -75,6 +75,8 @@ public class DsctlCtrl
             Long epoch = null;
             String eventId = null;
             String sourceId = null;
+            Boolean addreset = false;
+            Integer format = 0;
 
             // Parse command line arguments.
             ArgvIterator argvIterator = new ArgvIterator(argv);
@@ -115,6 +117,14 @@ public class DsctlCtrl
                 else if ("-source-id".equals(curArg))
                 {
                     sourceId = argvIterator.next();
+                }
+                else if ("-reset".equals(curArg))
+                {
+                    addreset = true;
+                }
+                else if ("-ascmd".equals(curArg))
+                {
+                    format = 1;
                 }
                 else if ("-help".equals(curArg) || "--help".equals(curArg) || "-h".equals(curArg))
                 {
@@ -162,7 +172,7 @@ public class DsctlCtrl
                     if (command.equals(Commands.RESET))
                         exitCode = doReset();
                     else if (command.equals(Commands.GET))
-                        exitCode = doGet();
+                        exitCode = doGet(format, addreset);
                     else if (command.equals(Commands.SET))
                     {
                         if (seqno == null || epoch == null || eventId == null
@@ -171,7 +181,7 @@ public class DsctlCtrl
                             fatal("Command 'set' requires options -seqno, -epoch, -event-id and -source-id",
                                     null, 1);
                         }
-                        exitCode = doSet(seqno, epoch, eventId, sourceId);
+                        exitCode = doSet(seqno, epoch, eventId, sourceId, addreset);
                     }
                     else
                         fatal("Unrecognized command, try 'help' to get a list: "
@@ -228,7 +238,7 @@ public class DsctlCtrl
      * Get datasource position.
      */
     @SuppressWarnings("unchecked")
-    protected static int doGet() throws ReplicatorException,
+        protected static int doGet(Integer format, Boolean addreset) throws ReplicatorException,
             InterruptedException
     {
         List<ReplDBMSHeader> headers = admin.get(datasource);
@@ -239,31 +249,53 @@ public class DsctlCtrl
         }
         else
         {
-            JSONArray jsonArray = new JSONArray();
-            for (ReplDBMSHeader header : headers)
-            {
-
-                JSONObject jsonHeader = new JSONObject();
-                jsonHeader.put("applied_latency", header.getAppliedLatency());
-                jsonHeader.put("epoch_number", header.getEpochNumber());
-                jsonHeader.put("eventid", header.getEventId());
-                jsonHeader.put("extract_timestamp",
-                        toString(header.getExtractedTstamp()));
-                jsonHeader.put("fragno", header.getFragno());
-                jsonHeader.put("last_frag", header.getLastFrag());
-                jsonHeader.put("seqno", header.getSeqno());
-                jsonHeader.put("shard_id", header.getShardId());
-                jsonHeader.put("source_id", header.getSourceId());
-                jsonHeader.put("task_id", header.getTaskId());
-                jsonHeader.put("update_timestamp",
-                        toString(header.getUpdateTstamp()));
-                jsonArray.add(jsonHeader);
-            }
-            String json = jsonArray.toJSONString();
+            // Output the information as a dsctl command
             logger.info("Service \"" + service + "\" datasource \""
-                    + datasource + "\" position retrieved:");
-            logger.info(json);
-            DsctlCtrl.println(json);
+                        + datasource + "\" position retrieved:");
+            if (format == 1)
+                {
+                    for (ReplDBMSHeader header : headers)
+                        {
+                    StringBuilder sb = new StringBuilder();
+
+                    sb.append("dsctl set ");
+                    sb.append("-seqno " + header.getSeqno() + " ");
+                    sb.append("-epoch " + header.getEpochNumber() + " ");
+                    sb.append("-event-id \"" + header.getEventId() + "\" ");
+                    sb.append("-source-id \"" + header.getSourceId() + "\"");
+
+                    if (addreset)
+                        sb.append(" -reset");
+
+                    DsctlCtrl.println(sb.toString());
+                        }
+                }
+            // Output as JSON
+            else
+                {
+                    JSONArray jsonArray = new JSONArray();
+                    for (ReplDBMSHeader header : headers)
+                        {
+                            JSONObject jsonHeader = new JSONObject();
+                            jsonHeader.put("applied_latency", header.getAppliedLatency());
+                            jsonHeader.put("epoch_number", header.getEpochNumber());
+                            jsonHeader.put("eventid", header.getEventId());
+                            jsonHeader.put("extract_timestamp",
+                                           toString(header.getExtractedTstamp()));
+                            jsonHeader.put("fragno", header.getFragno());
+                            jsonHeader.put("last_frag", header.getLastFrag());
+                            jsonHeader.put("seqno", header.getSeqno());
+                            jsonHeader.put("shard_id", header.getShardId());
+                            jsonHeader.put("source_id", header.getSourceId());
+                            jsonHeader.put("task_id", header.getTaskId());
+                            jsonHeader.put("update_timestamp",
+                                           toString(header.getUpdateTstamp()));
+                            jsonArray.add(jsonHeader);
+                        }
+                    String json = jsonArray.toJSONString();
+                    DsctlCtrl.println(json);
+                    logger.info(json);
+                }
             return 0;
         }
     }
@@ -283,8 +315,16 @@ public class DsctlCtrl
      * Set datasource position.
      */
     protected static int doSet(long seqno, long epoch, String eventId,
-            String sourceId) throws ReplicatorException, InterruptedException
+                               String sourceId, Boolean addreset) throws ReplicatorException, InterruptedException
     {
+        if (addreset)
+            {
+                Integer reset = doReset();
+                if (reset != 0)
+                    {
+                        return(reset);
+                    }
+            }
         if (admin.set(datasource, seqno, epoch, eventId, sourceId))
         {
             String msg = "Service \"" + service + "\" datasource \""
@@ -348,11 +388,13 @@ public class DsctlCtrl
         println(" [-ds name]        - Name of the datasource (default: global)");
         // println(" [-log]            - If set, operations will be logged to a file");
         println("Operations:");
-        println("  get              - Return all available position information");
+        println("  get              - Return all available position information as JSON");
+        println("     [-ascmd]      - Return all available position information as command");
         println("  set -seqno ###   - Set position (all four parameters required)");
         println("      -epoch ###");
         println("      -event-id AAAAAAAAA.######:#######");
         println("      -source-id AAA.AAA.AAA");
+        println("     [-reset]      - Optionally reset the information first");
         println("  reset            - Clear datasource position information");
         println("  help             - Print this help display");
     }

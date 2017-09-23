@@ -25,6 +25,7 @@ REPL_MYSQL_CONF = "repl_datasource_mysql_conf"
 REPL_MYSQL_COMMAND = "repl_datasource_mysql_command"
 REPL_MYSQL_SERVICE_CONF = "repl_datasource_mysql_service_conf"
 EXTRACTOR_REPL_MYSQL_SERVICE_CONF = "repl_direct_datasource_mysql_service_conf"
+REPL_MYSQL_ALLOW_INTENSIVE_CHECKS = "mysql_allow_intensive_checks"
 
 class MySQLDatabasePlatform < ConfigureDatabasePlatform
   attr_reader :sslca, :sslcert, :sslkey
@@ -380,6 +381,10 @@ class MySQLDatabasePlatform < ConfigureDatabasePlatform
     else
       v
     end
+  end
+
+  def getVersionNumber()
+    getVersion()[0..2].to_f()
   end
 	
 	def get_thl_filters()
@@ -1098,6 +1103,14 @@ class MySQLXtrabackupRestoreToDataDir < ConfigurePrompt
   end
 end
 
+class MySQLAllowIntensiveChecks < ConfigurePrompt
+  include ReplicationServicePrompt
+
+  def initialize
+    super(REPL_MYSQL_ALLOW_INTENSIVE_CHECKS, "Allow querying of information_schema for some validation checks", PV_BOOLEAN, "false")
+  end
+end
+
 #
 # Validation
 #
@@ -1367,6 +1380,11 @@ class MySQLApplierServerIDCheck < ConfigureValidationCheck
       debug("Unable to check for a configured server-id in '#{conf_file}' on #{get_applier_datasource.get_connection_summary}")
     end
   end
+
+  def enabled?
+    super()
+  end
+
 end
 
 class MySQLApplierPortCheck < ConfigureValidationCheck
@@ -2045,35 +2063,41 @@ class MySQLConnectorPermissionsCheck < ConfigureValidationCheck
   end
   
   def validate   
-    connuser = @config.getProperty(CONN_CLIENTLOGIN)
+    connuser = @config.getProperty(CONN_CLIENTLOGIN)    
     connpassword = @config.getProperty(CONN_CLIENTPASSWORD)
 
-    if get_applier_datasource.get_value("select user from mysql.user where user='#{connuser}'") == nil
-      error("The user specified in --application-user (#{connuser}) does not exist")
-      help("Ensure the user '#{connuser}' exists on all of the instances in the cluster being installed")
+    if @config.getProperty(CONN_CLIENTLOGIN).to_s() == ''
+      error("Please supply the application_user credentials with the --application-user and --application-password configuration options")
+    elsif @config.getProperty(CONN_CLIENTLOGIN).to_s() == @config.getProperty(get_member_key(REPL_DBLOGIN)).to_s()
+      error("The application-user must be different from the replication-user")  
     else
-      hosts=get_applier_datasource.get_value_a("select host from mysql.user where user='#{connuser}'",'host')
+      if get_applier_datasource.get_value("select user from mysql.user where user='#{connuser}'") == nil
+        error("The user specified in --application-user (#{connuser}) does not exist")
+        help("Ensure the user '#{connuser}' exists on all of the instances in the cluster being installed")
+      else
+        hosts=get_applier_datasource.get_value_a("select host from mysql.user where user='#{connuser}'",'host')
     
-      hosts.each do |host|
-        if get_applier_datasource.get_value("select super_priv from mysql.user where user='#{connuser}' and host='#{host}'") == 'Y'
-          error("The user specified in --application-user (#{connuser}@#{host}) has super privileges and can not be safely used as a application-user")
-          help("The user #{connuser} has the SUPER privilege. This is not safe as it allows the application to write to READ_ONLY slave.Revoke this privilege using REVOKE SUPER on *.* from '#{connuser}'@'#{host}' ")
-        end
-
-        # Check MySQL password() returns 
-        result = get_applier_datasource.run("SELECT 'OK' AS 'RESULT' \\G", "application_user")
-        unless result.include? "OK"
-          error("Unable to connect to MySQL as #{connuser}@#{host}.")
-        end
-
-        if @config.getProperty('connector_smartscale') == 'true'
-          if get_applier_datasource.get_value("select Repl_client_priv from mysql.user where user='#{connuser}' and host='#{host}'") == 'N'
-            error("The user specified in --application-user (#{connuser}@#{host}) does not have REPLICATION CLIENT privileges and SMARTSCALE in enabled")
-            help("When SmartScale is enabled, all application users require the REPLICATION CLIENT  privilege. Grant it to the user via GRANT REPLICATION CLIENT on *.* to '#{connuser}'@#{host}")
+        hosts.each do |host|
+          if get_applier_datasource.get_value("select super_priv from mysql.user where user='#{connuser}' and host='#{host}'") == 'Y'
+            error("The user specified in --application-user (#{connuser}@#{host}) has super privileges and can not be safely used as a application-user")
+            help("The user #{connuser} has the SUPER privilege. This is not safe as it allows the application to write to READ_ONLY slave.Revoke this privilege using REVOKE SUPER on *.* from '#{connuser}'@'#{host}' ")
           end
-          if get_applier_datasource.get_value(" select count(*) from mysql.user where User not in ('root','tungsten') and  Repl_client_priv = 'N'").to_i != 0
-            warning("Users exist in the database that do not have REPLICATION CLIENT privileges and SMARTSCALE in enabled")
-            help("When SmartScale is enabled, all application users require the REPLICATION CLIENT  privilege to connect . Grant it to the user via GRANT REPLICATION CLIENT on *.* to '<username>'@'<host>'")
+
+          # Check MySQL password() returns 
+          result = get_applier_datasource.run("SELECT 'OK' AS 'RESULT' \\G", "application_user")
+          unless result.include? "OK"
+            error("Unable to connect to MySQL as #{connuser}@#{host}.")
+          end
+
+          if @config.getProperty('connector_smartscale') == 'true'
+            if get_applier_datasource.get_value("select Repl_client_priv from mysql.user where user='#{connuser}' and host='#{host}'") == 'N'
+              error("The user specified in --application-user (#{connuser}@#{host}) does not have REPLICATION CLIENT privileges and SMARTSCALE in enabled")
+              help("When SmartScale is enabled, all application users require the REPLICATION CLIENT  privilege. Grant it to the user via GRANT REPLICATION CLIENT on *.* to '#{connuser}'@#{host}")
+            end
+            if get_applier_datasource.get_value(" select count(*) from mysql.user where User not in ('root','tungsten') and  Repl_client_priv = 'N'").to_i != 0
+              warning("Users exist in the database that do not have REPLICATION CLIENT privileges and SMARTSCALE in enabled")
+              help("When SmartScale is enabled, all application users require the REPLICATION CLIENT  privilege to connect . Grant it to the user via GRANT REPLICATION CLIENT on *.* to '<username>'@'<host>'")
+            end
           end
         end
       end
@@ -2081,7 +2105,52 @@ class MySQLConnectorPermissionsCheck < ConfigureValidationCheck
   end
 
   def enabled?
-    super() && @config.getProperty(ENABLE_CONNECTOR_BRIDGE_MODE) != "true"
+    # Won't run check if application_user == replication-user as there is another check for that - ConnectorUserCheck
+    super() \
+      && @config.getProperty(ENABLE_CONNECTOR_BRIDGE_MODE) != "true" \
+      && @config.getProperty(CONN_CLIENTLOGIN).to_s() != @config.getProperty(get_member_key(REPL_DBLOGIN)).to_s()
+  end
+end
+
+class MySQLConnectorBridgeModePermissionsCheck < ConfigureValidationCheck
+  include ReplicationServiceValidationCheck
+  include MySQLApplierCheck
+  include ClusteringServiceCheck
+
+  def set_vars
+    @title = "Connector in Bridge mode Mysql user permissions check"
+  end
+
+  def validate
+    connuser = @config.getProperty(CONN_CLIENTLOGIN)
+    connpassword = @config.getProperty(CONN_CLIENTPASSWORD)
+    
+    # Check that the user exists in MySQL
+    if get_applier_datasource.get_value("select user from mysql.user where user='#{connuser}'") == nil
+      error("The user specified in --application-user (#{connuser}) does not exist")
+      help("Ensure the user '#{connuser}' exists on all of the instances in the cluster being installed")
+    else
+      # Check that credentials allow login to MySQL
+      result = get_applier_datasource.run("SELECT 'OK' AS 'RESULT' \\G", "application_user")
+      unless result.include? "OK"
+        error("Unable to connect to MySQL as #{connuser}.")
+      end
+      # Check for SUPER privs
+      hosts=get_applier_datasource.get_value_a("select host from mysql.user where user='#{connuser}'",'host')
+      hosts.each do |host|
+        if get_applier_datasource.get_value("select super_priv from mysql.user where user='#{connuser}' and host='#{host}'") == 'Y'
+          error("The user specified in --application-user (#{connuser}@#{host}) has super privileges and can not be safely used as a application-user")
+          help("The user #{connuser} has the SUPER privilege. This is not safe as it allows the application to write to READ_ONLY slave.Revoke this privilege using REVOKE SUPER on *.* from '#{connuser}'@'#{host}' ")
+        end
+      end
+    end
+  end
+
+  def enabled?
+    super() \
+      && @config.getProperty(ENABLE_CONNECTOR_BRIDGE_MODE) == "true" \
+      && @config.getProperty(CONN_CLIENTLOGIN).to_s() != '' \
+      && @config.getProperty(CONN_CLIENTLOGIN).to_s() != @config.getProperty(get_member_key(REPL_DBLOGIN)).to_s()
   end
 end
 
@@ -2151,18 +2220,46 @@ class MySQLMyISAMCheck < ConfigureValidationCheck
   end
 
   def validate
-    info("Checking for MySQL MyISAM tables")
+    info("Checking for MyISAM tables")
+
+    msg_myisam_exist    = "MyISAM tables were found. Replication will work properly during most cases but MyISAM tables " \
+                          "can cause inconsistent checkpoints when stopping the replicator. If you have MyISAM tables and" \
+                          " accept this risk, ignore the check by adding --skip-validation-check=MySQLMyISAMCheck."
+
+    msg_unable_to_check = "Unable to determine if MyISAM tables exist. Replication will work properly during most cases " \
+                          "but MyISAM tables can cause inconsistent checkpoints when stopping the replicator. To enable " \
+                          "this check, add --root-command-prefix=true or ensure the mysql group has at least read and execute" \
+                          " permissions on the data directory and all nested directories. \n" \
+                          "If you prefer not to do one of the above, tpm can run a check for MyISAM tables by querying the information_schema " \
+                          "if you add --mysql-allow-intensive-checks to your configuration. Be aware that if you have thousands of tables the check could impact running queries.\n" \
+                          "If you have MyISAM tables and accept this risk, you can ignore the check by adding --skip-validation-check=MySQLMyISAMCheck."
+
+    mysql_version = get_applier_datasource.getVersionNumber()
+    if mysql_version >= 5.7
+      exclude_schemas = "'MYSQL','INFORMATION_SCHEMA', 'SYS', 'PERFORMANCE_SCHEMA'"
+    else
+      exclude_schemas = "'MYSQL','INFORMATION_SCHEMA', 'PERFORMANCE_SCHEMA'"
+    end
+
+    ifs_query           = "SELECT COUNT(*) AS 'RESULT' " \
+                          "FROM " \
+                          "(" \
+                          "  SELECT 1 " \
+                          "  FROM INFORMATION_SCHEMA.TABLES" \
+                          "  WHERE ENGINE='MyISAM' " \
+                          "  AND TABLE_SCHEMA NOT IN ( #{exclude_schemas} )" \
+                          "  LIMIT 1" \
+                          ") AS X"
 
     datadir = get_applier_datasource.get_value("SHOW VARIABLES LIKE 'datadir'", "Value")
 
     if datadir == nil
       warning "Unable to determine datadir"
     else
-      # Strip trailing slash if it exists - OSX find didn't like it
+      # Define the find command start and strip trailing slash if it exists - OSX find didn't like it
       datadir = datadir.chomp("/")
       find_cmd = "find '#{datadir}' -path '#{datadir}/mysql' -prune -o -path '#{datadir}/performance_schema' -prune -o -path '#{datadir}/information_schema' "
 
-      mysql_version = get_applier_datasource.getVersion()[0..2].to_f()
       if mysql_version >= 5.7
         # Add the sys schema to the exlusions in the find command. It is new in 5.7 and we don't need to search it.
         find_cmd = find_cmd + "-prune -o -path '#{datadir}/sys' "
@@ -2182,14 +2279,27 @@ class MySQLMyISAMCheck < ConfigureValidationCheck
       begin
         # Test for the existence of a data directory with execute permissions - needed to list directory contents.
         cmd_result(test_cmd)
+
         # Run the bash find command to search for MyISAM files having an extension of MYD. Quit after the first match.
         myisam_result = cmd_result(find_cmd)
         if myisam_result.include? ".MYD"
-          error("MyISAM tables were found. Replication will work properly during most cases but MyISAM tables can cause inconsistent checkpoints when stopping the replicator. If you have MyISAM tables and accept this risk, ignore the check by adding --skip-validation-check=MySQLMyISAMCheck.")
+          error(msg_myisam_exist)
         end
+
         # If an error was raised then one of those two commands failed, indicating a lack of permissions.
         rescue CommandError => ce
-          error("Unable to determine if MyISAM tables exist. Replication will work properly during most cases but MyISAM tables can cause inconsistent checkpoints when stopping the replicator. To enable this check, add --root-command-prefix=true or ensure the mysql group has at least read and execute permissions on the data directory and all nested directories. If you have MyISAM tables and accept this risk, ignore the check by adding --skip-validation-check=MySQLMyISAMCheck.")
+
+          # Try a test on information_schema if --allow-intensive-checks is set
+          if @config.getProperty(REPL_MYSQL_ALLOW_INTENSIVE_CHECKS) == "true"
+            result = get_applier_datasource.get_value(ifs_query)
+            if result.to_i == 1
+              error(msg_myisam_exist)
+            elsif result.to_i != 0
+              warning(msg_unable_to_check)
+            end
+          else
+            warning(msg_unable_to_check)
+          end
       end
     end
   end
@@ -2321,7 +2431,7 @@ class MySQLLoadDataInfilePermissionsCheck < ConfigureValidationCheck
   end
 end
 
-class MySQLUnsopportedDataTypesCheck < ConfigureValidationCheck
+class MySQLUnsupportedDataTypesCheck < ConfigureValidationCheck
   include ReplicationServiceValidationCheck
   include MySQLApplierCheck
 
@@ -2330,13 +2440,113 @@ class MySQLUnsopportedDataTypesCheck < ConfigureValidationCheck
   end
 
   def validate
-    info("Warning regarding the use MySQL 5.7 or greater unsupported datatypes")
-    warning("Please note, the replicator is unable to replicate tables that have columns defined as type JSON or that utilise VIRTUAL GENERATED values. It is the customer's responsibility to ensure that these are not being used, tpm does not check for these.")
+    unless @config.getProperty(REPL_MYSQL_ALLOW_INTENSIVE_CHECKS) == "true"
+      error("IMPORTANT: The replicator is unable to replicate tables that have columns defined as type JSON or that utilise VIRTUAL GENERATED values! \n" \
+        "The use of these features will cause replication to fail. \n" \
+        "If you want tpm to check for these add --mysql-allow-intensive-checks to the configuration. \n" \
+        "Be aware that the checks will query the information_schema and if you have thousands of tables this may affect other queries while the check runs. \n" \
+        "Otherwise, if you have confirmed manually that JSON or VIRTUAL GENERATED columns are not being used, you can " \
+        "skip this check by adding --skip-validation-check=MySQLUnsupportedDataTypesCheck to your configuration." \
+      )
+    end
   end
 
   def enabled?
     # Only run this check if the MySQL version is 5.7 or higher
-    mysql_version = get_applier_datasource.getVersion()[0..2].to_f()
-    super() && mysql_version >= 5.7
+    super() && get_applier_datasource.getVersionNumber() >= 5.7
+  end
+end
+
+class MySQLJsonDataTypeCheck < ConfigureValidationCheck
+  include ReplicationServiceValidationCheck
+  include MySQLApplierCheck
+
+  def set_vars
+    @title = "MySQL JSON datatype check"
+  end
+
+  def validate
+    info("Checking for unsupported datatype JSON")
+
+    msg_unable_to_check = "The replicator is unable to replicate tables that have columns defined as type JSON. The check for " \
+                          "JSON columns failed! If you are certain that the JSON datatype is not being used in this database, you" \
+                          " may ignore the check by adding --skip-validation-check=MySQLJsonDataTypeCheck to the configuration"
+
+    msg_found            = "JSON columns were found! JSON is an unsupported datatype and will cause the replicator to fail. " \
+                           "These columns must be removed or altered."
+
+    ifs_query    = "SELECT COUNT(*) AS 'RESULT' " \
+                        "FROM " \
+                        "(" \
+                        "  SELECT 1 " \
+                        "  FROM INFORMATION_SCHEMA.COLUMNS" \
+                        "  WHERE COLUMN_TYPE = 'json' "\
+                        "  LIMIT 1" \
+                        ") AS X"
+
+    # Try a test on information_schema for json columns
+      columns_exist = get_applier_datasource.get_value(ifs_query)
+
+      if columns_exist.to_i == 1
+            error(msg_found)
+      elsif columns_exist.to_i != 0
+        error(msg_unable_to_check)
+      end
+  end
+
+  def enabled?
+    # Only run this check if the MySQL version is 5.7 or higher
+    # And --mysql-allow-intensive-checks is set
+
+    super() \
+      && get_applier_datasource.getVersionNumber() >= 5.7 \
+      && @config.getProperty(REPL_MYSQL_ALLOW_INTENSIVE_CHECKS) == "true"
+  end
+end
+
+class MySQLGeneratedColumnCheck < ConfigureValidationCheck
+  include ReplicationServiceValidationCheck
+  include MySQLApplierCheck
+
+  def set_vars
+    @title = "MySQL GENERATED columns check"
+  end
+
+  def validate
+    info("Checking for unsupported GENERATED columns.")
+
+    msg_unable_to_check = "The replicator is unable to replicate tables that have  GENERATED columns. The check for " \
+                          "GENERATED columns failed! If you are certain that GENERATED columns are not being used in this database, you" \
+                          " may ignore the check by adding --skip-validation-check=MySQLGeneratedColumnCheck to the configuration"
+
+    msg_found            = "GENERATED columns were found! MySQL GENERATED columns are not supported and will cause the replicator to fail. " \
+                           "These columns must be removed or altered."
+
+    ifs_query            = "SELECT COUNT(*) AS 'RESULT' " \
+                           "FROM " \
+                           "(" \
+                           "  SELECT 1 " \
+                           "  FROM INFORMATION_SCHEMA.COLUMNS" \
+                           "  WHERE EXTRA IN ( 'VIRTUAL GENERATED', 'STORED GENERATED' ) "\
+                           "  LIMIT 1" \
+                           ") AS X"
+
+    # Try a test on information_schema for json columns
+      columns_exist = get_applier_datasource.get_value(ifs_query)
+
+      if columns_exist.to_i == 1
+            error(msg_found)
+      elsif columns_exist.to_i != 0
+        error(msg_unable_to_check)
+      end
+  end
+
+  def enabled?
+    # Only run this check if the MySQL version is 5.7 or higher
+    # And --mysql-allow-intensive-checks is set
+
+    super() \
+      && get_applier_datasource.getVersionNumber() >= 5.7 \
+      && @config.getProperty(REPL_MYSQL_ALLOW_INTENSIVE_CHECKS) == "true"
   end
 end

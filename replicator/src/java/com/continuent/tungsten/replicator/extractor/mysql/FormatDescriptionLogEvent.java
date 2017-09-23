@@ -1,6 +1,6 @@
 /**
- * VMware Continuent Tungsten Replicator
- * Copyright (C) 2015 VMware, Inc. All rights reserved.
+ * Tungsten Replicator
+ * Copyright (C) 2015 Continuent Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -53,7 +53,7 @@ public class FormatDescriptionLogEvent extends StartLogEvent
         this.startPosition = currentPosition;
         if (logger.isDebugEnabled())
             logger.debug("Extracting event at position  : " + startPosition
-                    + " -> " + getNextEventPosition());
+                    + " -&gt; " + getNextEventPosition());
 
         int noCrcEventLength = eventLength - 4;
 
@@ -80,11 +80,12 @@ public class FormatDescriptionLogEvent extends StartLogEvent
 
         // Clear the IN_USE flag before computing the CRC
         // No need to save the value as we don't use it anyway.
-        buffer[MysqlBinlog.FLAGS_OFFSET] = (byte) (buffer[MysqlBinlog.FLAGS_OFFSET] & ~MysqlBinlog.LOG_EVENT_BINLOG_IN_USE_F);
+        buffer[MysqlBinlog.FLAGS_OFFSET] = (byte) (buffer[MysqlBinlog.FLAGS_OFFSET]
+                & ~MysqlBinlog.LOG_EVENT_BINLOG_IN_USE_F);
 
         if (logger.isDebugEnabled())
-            logger.debug("Checksumming : "
-                    + hexdump(buffer, 0, noCrcEventLength));
+            logger.debug(
+                    "Checksumming : " + hexdump(buffer, 0, noCrcEventLength));
 
         long evChecksum = 0L;
         try
@@ -113,20 +114,15 @@ public class FormatDescriptionLogEvent extends StartLogEvent
             {
                 logger.debug("This FD event is checksummed");
                 // Check whether checksum algorithm is set
-                logger.debug("@Pos : "
-                        + (MysqlBinlog.LOG_EVENT_MINIMAL_HEADER_LEN
-                                + MysqlBinlog.FORMAT_DESCRIPTION_HEADER_LEN_5_6 + 1)
-                        + " Algo is :"
-                        + hexdump(
-                                buffer,
-                                MysqlBinlog.LOG_EVENT_MINIMAL_HEADER_LEN
-                                        + MysqlBinlog.FORMAT_DESCRIPTION_HEADER_LEN_5_6
-                                        + 1, 1));
+                // Check the last byte preceding the checksum itself
+                logger.debug("@Pos : " + (noCrcEventLength - 1) + " Algo is :"
+                        + hexdump(buffer, noCrcEventLength - 1, 1));
+
             }
 
             int chksumAlg = GeneralConversion
-                    .unsignedByteToInt(buffer[MysqlBinlog.LOG_EVENT_MINIMAL_HEADER_LEN
-                            + MysqlBinlog.FORMAT_DESCRIPTION_HEADER_LEN_5_6 + 1]);
+                    .unsignedByteToInt(buffer[noCrcEventLength - 1]);
+
             if (logger.isDebugEnabled())
                 logger.debug("Found algo =" + chksumAlg);
             if (chksumAlg > 0 && chksumAlg < 0xFF)
@@ -136,10 +132,12 @@ public class FormatDescriptionLogEvent extends StartLogEvent
             }
         }
         else
+
         {
             this.checksumAlgo = 0; // NONE
             if (logger.isDebugEnabled())
-                logger.debug("This FD event is not checksummed -> this master is not checksum enabled !");
+                logger.debug(
+                        "This FD event is not checksummed -&gt; this master is not checksum enabled !");
         }
     }
 
@@ -161,18 +159,26 @@ public class FormatDescriptionLogEvent extends StartLogEvent
                 commonHeaderLength = MysqlBinlog.OLD_HEADER_LEN;
                 eventTypesCount = MysqlBinlog.FORMAT_DESCRIPTION_EVENT - 1;
 
-                postHeaderLength[MysqlBinlog.START_EVENT_V3 - 1] = MysqlBinlog.START_V3_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.QUERY_EVENT - 1] = MysqlBinlog.QUERY_HEADER_MINIMAL_LEN;
+                postHeaderLength[MysqlBinlog.START_EVENT_V3
+                        - 1] = MysqlBinlog.START_V3_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.QUERY_EVENT
+                        - 1] = MysqlBinlog.QUERY_HEADER_MINIMAL_LEN;
                 postHeaderLength[MysqlBinlog.STOP_EVENT - 1] = 0;
                 postHeaderLength[MysqlBinlog.ROTATE_EVENT - 1] = 0;
                 postHeaderLength[MysqlBinlog.INTVAR_EVENT - 1] = 0;
-                postHeaderLength[MysqlBinlog.LOAD_EVENT - 1] = MysqlBinlog.LOAD_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.LOAD_EVENT
+                        - 1] = MysqlBinlog.LOAD_HEADER_LEN;
                 postHeaderLength[MysqlBinlog.SLAVE_EVENT - 1] = 0;
-                postHeaderLength[MysqlBinlog.CREATE_FILE_EVENT - 1] = MysqlBinlog.CREATE_FILE_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.APPEND_BLOCK_EVENT - 1] = MysqlBinlog.APPEND_BLOCK_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.EXEC_LOAD_EVENT - 1] = MysqlBinlog.EXEC_LOAD_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.DELETE_FILE_EVENT - 1] = MysqlBinlog.DELETE_FILE_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.NEW_LOAD_EVENT - 1] = postHeaderLength[MysqlBinlog.LOAD_EVENT - 1];
+                postHeaderLength[MysqlBinlog.CREATE_FILE_EVENT
+                        - 1] = MysqlBinlog.CREATE_FILE_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.APPEND_BLOCK_EVENT
+                        - 1] = MysqlBinlog.APPEND_BLOCK_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.EXEC_LOAD_EVENT
+                        - 1] = MysqlBinlog.EXEC_LOAD_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.DELETE_FILE_EVENT
+                        - 1] = MysqlBinlog.DELETE_FILE_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.NEW_LOAD_EVENT
+                        - 1] = postHeaderLength[MysqlBinlog.LOAD_EVENT - 1];
                 postHeaderLength[MysqlBinlog.RAND_EVENT - 1] = 0;
                 postHeaderLength[MysqlBinlog.USER_VAR_EVENT - 1] = 0;
                 break;
@@ -180,18 +186,27 @@ public class FormatDescriptionLogEvent extends StartLogEvent
                 commonHeaderLength = MysqlBinlog.OLD_HEADER_LEN;
                 eventTypesCount = MysqlBinlog.FORMAT_DESCRIPTION_EVENT - 1;
 
-                postHeaderLength[MysqlBinlog.START_EVENT_V3 - 1] = MysqlBinlog.START_V3_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.QUERY_EVENT - 1] = MysqlBinlog.QUERY_HEADER_MINIMAL_LEN;
+                postHeaderLength[MysqlBinlog.START_EVENT_V3
+                        - 1] = MysqlBinlog.START_V3_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.QUERY_EVENT
+                        - 1] = MysqlBinlog.QUERY_HEADER_MINIMAL_LEN;
                 postHeaderLength[MysqlBinlog.STOP_EVENT - 1] = 0;
-                postHeaderLength[MysqlBinlog.ROTATE_EVENT - 1] = MysqlBinlog.ROTATE_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.ROTATE_EVENT
+                        - 1] = MysqlBinlog.ROTATE_HEADER_LEN;
                 postHeaderLength[MysqlBinlog.INTVAR_EVENT - 1] = 0;
-                postHeaderLength[MysqlBinlog.LOAD_EVENT - 1] = MysqlBinlog.LOAD_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.LOAD_EVENT
+                        - 1] = MysqlBinlog.LOAD_HEADER_LEN;
                 postHeaderLength[MysqlBinlog.SLAVE_EVENT - 1] = 0;
-                postHeaderLength[MysqlBinlog.CREATE_FILE_EVENT - 1] = MysqlBinlog.CREATE_FILE_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.APPEND_BLOCK_EVENT - 1] = MysqlBinlog.APPEND_BLOCK_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.EXEC_LOAD_EVENT - 1] = MysqlBinlog.EXEC_LOAD_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.DELETE_FILE_EVENT - 1] = MysqlBinlog.DELETE_FILE_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.NEW_LOAD_EVENT - 1] = postHeaderLength[MysqlBinlog.LOAD_EVENT - 1];
+                postHeaderLength[MysqlBinlog.CREATE_FILE_EVENT
+                        - 1] = MysqlBinlog.CREATE_FILE_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.APPEND_BLOCK_EVENT
+                        - 1] = MysqlBinlog.APPEND_BLOCK_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.EXEC_LOAD_EVENT
+                        - 1] = MysqlBinlog.EXEC_LOAD_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.DELETE_FILE_EVENT
+                        - 1] = MysqlBinlog.DELETE_FILE_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.NEW_LOAD_EVENT
+                        - 1] = postHeaderLength[MysqlBinlog.LOAD_EVENT - 1];
                 postHeaderLength[MysqlBinlog.RAND_EVENT - 1] = 0;
                 postHeaderLength[MysqlBinlog.USER_VAR_EVENT - 1] = 0;
 
@@ -200,27 +215,47 @@ public class FormatDescriptionLogEvent extends StartLogEvent
                 commonHeaderLength = MysqlBinlog.LOG_EVENT_HEADER_LEN;
                 eventTypesCount = MysqlBinlog.LOG_NEW_5_6_EVENT_TYPES;
 
-                postHeaderLength[MysqlBinlog.START_EVENT_V3 - 1] = MysqlBinlog.START_V3_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.QUERY_EVENT - 1] = MysqlBinlog.QUERY_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.ROTATE_EVENT - 1] = MysqlBinlog.ROTATE_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.LOAD_EVENT - 1] = MysqlBinlog.LOAD_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.CREATE_FILE_EVENT - 1] = MysqlBinlog.CREATE_FILE_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.APPEND_BLOCK_EVENT - 1] = MysqlBinlog.APPEND_BLOCK_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.EXEC_LOAD_EVENT - 1] = MysqlBinlog.EXEC_LOAD_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.DELETE_FILE_EVENT - 1] = MysqlBinlog.DELETE_FILE_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.NEW_LOAD_EVENT - 1] = postHeaderLength[MysqlBinlog.LOAD_EVENT - 1];
-                postHeaderLength[MysqlBinlog.FORMAT_DESCRIPTION_EVENT - 1] = MysqlBinlog.FORMAT_DESCRIPTION_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.TABLE_MAP_EVENT - 1] = MysqlBinlog.TABLE_MAP_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.WRITE_ROWS_EVENT - 1] = MysqlBinlog.ROWS_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.UPDATE_ROWS_EVENT - 1] = MysqlBinlog.ROWS_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.DELETE_ROWS_EVENT - 1] = MysqlBinlog.ROWS_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.EXECUTE_LOAD_QUERY_EVENT - 1] = MysqlBinlog.EXECUTE_LOAD_QUERY_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.APPEND_BLOCK_EVENT - 1] = MysqlBinlog.APPEND_BLOCK_HEADER_LEN;
-                postHeaderLength[MysqlBinlog.DELETE_FILE_EVENT - 1] = MysqlBinlog.DELETE_FILE_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.START_EVENT_V3
+                        - 1] = MysqlBinlog.START_V3_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.QUERY_EVENT
+                        - 1] = MysqlBinlog.QUERY_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.ROTATE_EVENT
+                        - 1] = MysqlBinlog.ROTATE_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.LOAD_EVENT
+                        - 1] = MysqlBinlog.LOAD_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.CREATE_FILE_EVENT
+                        - 1] = MysqlBinlog.CREATE_FILE_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.APPEND_BLOCK_EVENT
+                        - 1] = MysqlBinlog.APPEND_BLOCK_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.EXEC_LOAD_EVENT
+                        - 1] = MysqlBinlog.EXEC_LOAD_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.DELETE_FILE_EVENT
+                        - 1] = MysqlBinlog.DELETE_FILE_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.NEW_LOAD_EVENT
+                        - 1] = postHeaderLength[MysqlBinlog.LOAD_EVENT - 1];
+                postHeaderLength[MysqlBinlog.FORMAT_DESCRIPTION_EVENT
+                        - 1] = MysqlBinlog.FORMAT_DESCRIPTION_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.TABLE_MAP_EVENT
+                        - 1] = MysqlBinlog.TABLE_MAP_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.WRITE_ROWS_EVENT
+                        - 1] = MysqlBinlog.ROWS_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.UPDATE_ROWS_EVENT
+                        - 1] = MysqlBinlog.ROWS_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.DELETE_ROWS_EVENT
+                        - 1] = MysqlBinlog.ROWS_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.EXECUTE_LOAD_QUERY_EVENT
+                        - 1] = MysqlBinlog.EXECUTE_LOAD_QUERY_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.APPEND_BLOCK_EVENT
+                        - 1] = MysqlBinlog.APPEND_BLOCK_HEADER_LEN;
+                postHeaderLength[MysqlBinlog.DELETE_FILE_EVENT
+                        - 1] = MysqlBinlog.DELETE_FILE_HEADER_LEN;
 
-                postHeaderLength[MysqlBinlog.NEW_WRITE_ROWS_EVENT - 1] = MysqlBinlog.ROWS_HEADER_LEN + 2;
-                postHeaderLength[MysqlBinlog.NEW_UPDATE_ROWS_EVENT - 1] = MysqlBinlog.ROWS_HEADER_LEN + 2;
-                postHeaderLength[MysqlBinlog.NEW_DELETE_ROWS_EVENT - 1] = MysqlBinlog.ROWS_HEADER_LEN + 2;
+                postHeaderLength[MysqlBinlog.NEW_WRITE_ROWS_EVENT
+                        - 1] = MysqlBinlog.ROWS_HEADER_LEN + 2;
+                postHeaderLength[MysqlBinlog.NEW_UPDATE_ROWS_EVENT
+                        - 1] = MysqlBinlog.ROWS_HEADER_LEN + 2;
+                postHeaderLength[MysqlBinlog.NEW_DELETE_ROWS_EVENT
+                        - 1] = MysqlBinlog.ROWS_HEADER_LEN + 2;
 
                 maria10PostHeaderLength[MysqlBinlog.ANNOTATE_ROWS_EVENT
                         - MysqlBinlog.ENUM_MARIA_START_EVENT] = MysqlBinlog.ANNOTATE_ROWS_HEADER_LEN;

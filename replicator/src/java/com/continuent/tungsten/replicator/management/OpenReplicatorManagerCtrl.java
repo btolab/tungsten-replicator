@@ -1,13 +1,13 @@
 /**
- * VMware Continuent Tungsten Replicator
- * Copyright (C) 2015 VMware, Inc. All rights reserved.
+ * Tungsten Replicator
+ * Copyright (C) 2015 Continuent Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *      
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -75,7 +75,7 @@ import com.continuent.tungsten.replicator.thl.ProtocolParams;
  * This class defines a ReplicatorManagerCtrl that implements a simple utility
  * to access ReplicatorManager JMX interface. See the printHelp() command for a
  * description of current commands.
- * 
+ *
  * @author <a href="mailto:teemu.ollakka@continuent.com">Teemu Ollakka</a>
  * @version 1.0
  */
@@ -165,6 +165,7 @@ public class OpenReplicatorManagerCtrl
         println("         [-no-checksum]");
         println("         [-provision]");
         println("                               - Set Replicator to ONLINE with start and stop points");
+        println("  perf                         - Show performance information");
         println("  properties [-filter name]    - Print all in-memory properties and their current values");
         println("             [-values]         - Print only the values in plain text");
         println("  purge [-y] [-limit s]        - Purge non-Tungsten logins on DBMS, waiting up to s seconds");
@@ -175,7 +176,8 @@ public class OpenReplicatorManagerCtrl
         println("                                 Warning! This is deprecated and will be removed in a future release!");
         println("  setrole -role r [-uri u]     - Set replicator role");
         println("  load                         - Load and start replication service");
-        println("  status [-name {channel-assignments|services|shards|stages|stores|tasks|watches}] [-json]");
+        println("  qs [-r [#]]                  - Print quick download status");
+        println("  status [-name {channel-assignments|services|shards|stages|stores|tasks|watches}] [-json] [-r [#]]");
         println("                               - Print replicator status information");
         println("  unload [-y]                  - Stop and unload replication service");
         println("  wait -state st [-limit s]    - Wait up to s seconds for replicator state st");
@@ -197,7 +199,7 @@ public class OpenReplicatorManagerCtrl
 
     /**
      * Main method to run utility.
-     * 
+     *
      * @param argv optional command string
      */
     public static void main(String argv[])
@@ -288,7 +290,7 @@ public class OpenReplicatorManagerCtrl
                 this.authenticationInfo = SecurityHelper
                         .loadAuthenticationInformation(securityPropertiesFileLocation);
                 /**
-                 * If verbose mode is set print whether password is used, 
+                 * If verbose mode is set print whether password is used,
                  * encryption is enabled, and if that is the case, the cipher,
                  * and protocol
                  */
@@ -397,6 +399,12 @@ public class OpenReplicatorManagerCtrl
             // Remove undocumented "provision" command
             // else if (command.equals(Commands.PROVISION))
             // doProvision();
+            else if (command.equals(Commands.QUICKSTATS))
+                doQuickStatus();
+            else if (command.equals(Commands.QUICKSTATSSHORT))
+                doQuickStatus();
+            else if (command.equals(Commands.PERF))
+                doPerformance();
             else if (command.equals(Commands.STATS))
                 doStatus();
             else if (command.equals(Commands.PROPERTIES))
@@ -619,7 +627,7 @@ public class OpenReplicatorManagerCtrl
 
     // REPLICATION SERVICES COMMANDS //
 
-    // Handle a request for status.
+    // Handle a request for services.
     private void doServices() throws Exception
     {
         String curArg = null;
@@ -1519,12 +1527,14 @@ public class OpenReplicatorManagerCtrl
             println("Restore is pending; check log for status");
     }
 
-    // Handle a request for status.
+    // Wrapper for the status operation to handle auto-refresh
     private void doStatus() throws Exception
     {
         String name = null;
         String curArg = null;
         boolean json = false;
+        Integer refresh = 0;
+
         try
         {
             while (argvIterator.hasNext())
@@ -1534,6 +1544,8 @@ public class OpenReplicatorManagerCtrl
                     name = argvIterator.next();
                 else if ("-json".equals(curArg))
                     json = true;
+                else if ("-r".equals(curArg))
+                    refresh = Integer.parseInt(argvIterator.next());
                 else
                 {
                     fatal("Unrecognized option: " + curArg, null);
@@ -1544,6 +1556,27 @@ public class OpenReplicatorManagerCtrl
         {
             fatal("Missing value for " + curArg, null);
         }
+
+        if (refresh == 0)
+        {
+            doStatusReal(name,json);
+        }
+        else
+        {
+            while(true)
+            {
+                System.out.print("\033[H\033[2J");  
+                System.out.flush();  
+                doStatusReal(name,json);
+                Thread.sleep(refresh * 1000);
+            }
+        }
+
+    }
+
+    // Handle a request for status.
+    private void doStatusReal(String name, Boolean json) throws Exception
+    {
 
         if (name == null)
         {
@@ -1570,6 +1603,436 @@ public class OpenReplicatorManagerCtrl
         }
     }
 
+    // Wrapper for the performance operation to handle auto-refresh
+    private void doPerformance() throws Exception
+    {
+        String curArg = null;
+        Integer refresh = 0;
+
+        try
+        {
+            while (argvIterator.hasNext())
+            {
+                curArg = argvIterator.next();
+                if ("-r".equals(curArg))
+                    refresh = Integer.parseInt(argvIterator.next());
+                else
+                {
+                    fatal("Unrecognized option: " + curArg, null);
+                }
+            }
+        }
+        catch (ArrayIndexOutOfBoundsException e)
+        {
+            fatal("Missing value for " + curArg, null);
+        }
+
+        if (refresh == 0)
+        {
+            doPerformanceReal();
+        }
+        else
+        {
+            while(true)
+            {
+                System.out.print("\033[H\033[2J");  
+                System.out.flush();  
+                doPerformanceReal();
+                Thread.sleep(refresh * 1000);
+            }
+        }
+
+    }
+
+    private Double getTransactionWriteCadence() throws Exception
+    {
+        // Collect stages info, putting it into the combined
+
+        List<Map<String, String>> stagePropList = new ArrayList<Map<String, String>>();
+        stagePropList = getOpenReplicator().statusList("stages");
+
+        List<String> stageseq = new ArrayList<String>();
+        Map<String,Map<String,String>> statistics = new HashMap<>();
+
+        for(Map<String, String> stageProps : stagePropList)
+            {
+                String stagename = stageProps.get("name");
+
+                stageseq.add(stagename);
+
+                Map<String,String> stagestats;
+
+                if (statistics.containsKey(stagename))
+                    stagestats = statistics.get(stagename);
+                else
+                    stagestats = new HashMap<String,String>();
+
+                TreeSet<String> treeSet = new TreeSet<String>(stageProps.keySet());
+                for (String key : treeSet)
+                    {
+                        String value = stageProps.get(key);
+
+                        stagestats.put(key,value);
+                    }
+
+                statistics.put(stagename,stagestats);
+            }
+
+        List<Map<String, String>> taskPropList  = new ArrayList<Map<String, String>>();
+        taskPropList = getOpenReplicator().statusList("tasks");
+
+        for(Map<String, String> taskProps : taskPropList)
+            {
+                String stagename = taskProps.get("stage");
+
+                Map<String,String> taskstats;
+
+                if (statistics.containsKey(stagename))
+                    taskstats = statistics.get(stagename);
+                else
+                    taskstats = new HashMap<String,String>();
+
+                TreeSet<String> treeSet = new TreeSet<String>(taskProps.keySet());
+                for (String key : treeSet)
+                    {
+                        String value = taskProps.get(key);
+
+                        taskstats.put(key,value);
+                    }
+                statistics.put(stagename,taskstats);
+            }
+
+        Double applyTime = 0.0;
+
+        for (String key : stageseq)
+            {
+                Map<String,String> stagestats = statistics.get(key);
+
+                Double baseeventcount = Double.parseDouble(stagestats.get("eventCount"));
+
+                if (baseeventcount == 0)
+                    baseeventcount = 1.0;
+
+                applyTime = applyTime + (Double.parseDouble(stagestats.get("extractTime")) +
+                                         Double.parseDouble(stagestats.get("filterTime")) +
+                                         Double.parseDouble(stagestats.get("otherTime")) +
+                                         Double.parseDouble(stagestats.get("applyTime")))/baseeventcount;
+            }
+
+        return(applyTime/stageseq.size());
+    }
+
+
+    // Output performance statistics
+    // Extract peformance information by correctly dumping a combination
+    // of both the stages and task output from status with more information
+
+    private void doPerformanceReal() throws Exception
+    {
+        List<Map<String, String>> propList = new ArrayList<Map<String, String>>();
+
+        List<Map<String, String>> stagePropList = new ArrayList<Map<String, String>>();
+        List<Map<String, String>> taskPropList  = new ArrayList<Map<String, String>>();
+
+        propList.add(getOpenReplicator().status());
+
+        Boolean showseq = true;
+        Double uptime = 0.0;
+
+        Map<String,Map<String,String>> statistics = new HashMap<>();
+
+        for (Map<String, String> props : propList)
+            {
+                if (!props.get("state").equals("ONLINE"))
+                    {
+                        println("Currently not online; performance stats not available");
+                        showseq = doPrettyState(props);
+                        return;
+                    }
+
+                uptime = Double.parseDouble(props.get("timeInStateSeconds"));
+            }
+
+        List<String> stageseq = new ArrayList<String>();
+
+        // Collect stages info, putting it into the combined
+
+        stagePropList = getOpenReplicator().statusList("stages");
+
+        for(Map<String, String> stageProps : stagePropList)
+            {
+                String stagename = stageProps.get("name");
+
+                stageseq.add(stagename);
+
+                Map<String,String> stagestats;
+
+                if (statistics.containsKey(stagename))
+                    stagestats = statistics.get(stagename);
+                else
+                    stagestats = new HashMap<String,String>();
+
+                List<String> filterlist = new ArrayList<String>();
+
+                TreeSet<String> treeSet = new TreeSet<String>(stageProps.keySet());
+                for (String key : treeSet)
+                    {
+                        String value = stageProps.get(key);
+
+                        if (key.matches("filter.([0-9]*).name"))
+                            {
+                                filterlist.add(value);
+                            }
+                        else
+                            {
+                                stagestats.put(key,value);
+                            }
+                    }
+
+                if (filterlist.size() > 0)
+                    {
+                        String filterlistfinal = "";
+                        for (int i = 0; i < filterlist.size(); i++)
+                            {
+                                if ((i+1) != filterlist.size())
+                                    {
+                                        filterlistfinal = filterlistfinal + filterlist.get(i) + " -> ";
+                                    }
+                                else
+                                    {
+                                        filterlistfinal = filterlistfinal + filterlist.get(i);
+                                    }
+                            }
+                        stagestats.put("filterlist",filterlistfinal);
+                    }
+                statistics.put(stagename,stagestats);
+            }
+
+        taskPropList = getOpenReplicator().statusList("tasks");
+
+        for(Map<String, String> taskProps : taskPropList)
+            {
+                String stagename = taskProps.get("stage");
+
+                Map<String,String> taskstats;
+
+                if (statistics.containsKey(stagename))
+                    taskstats = statistics.get(stagename);
+                else
+                    taskstats = new HashMap<String,String>();
+
+                TreeSet<String> treeSet = new TreeSet<String>(taskProps.keySet());
+                for (String key : treeSet)
+                    {
+                        String value = taskProps.get(key);
+
+                        taskstats.put(key,value);
+                    }
+                statistics.put(stagename,taskstats);
+            }
+
+        // Now dump the statistic info for each quoted stage
+
+        println("Statistics since last put online " + uptime.toString() + "s ago");
+
+        String statsrowformat = "%-20s | %10s | %11s | %11s | %11s | %11s | %11s | %11s | %11s ";
+        String statssummformat = "%61s | %11s | %11s | %11s | %11s | %11s";
+
+        println(String.format(statsrowformat,
+                              "Stage",
+                              "Seqno",
+                              "Latency",
+                              "Events",
+                              "Extraction",
+                              "Filtering",
+                              "Applying",
+                              "Other",
+                              "Total"));
+
+        for (String key : stageseq)
+            {
+                Map<String,String> stagestats = statistics.get(key);
+
+                println(String.format(statsrowformat,
+                                      key,
+                                      stagestats.get("appliedLastSeqno"),
+                                      String.format("%.3f",Double.parseDouble(stagestats.get("appliedLatency"))) + "s",
+                                      stagestats.get("eventCount"),
+                                      String.format("%.3f",Double.parseDouble(stagestats.get("extractTime"))) + "s",
+                                      String.format("%.3f",Double.parseDouble(stagestats.get("filterTime"))) + "s",
+                                      String.format("%.3f",Double.parseDouble(stagestats.get("applyTime"))) + "s",
+                                      String.format("%.3f",Double.parseDouble(stagestats.get("otherTime"))) + "s",
+                                      String.format("%.3f",(Double.parseDouble(stagestats.get("extractTime")) +
+                                                            Double.parseDouble(stagestats.get("filterTime")) +
+                                                            Double.parseDouble(stagestats.get("otherTime")) +
+                                                            Double.parseDouble(stagestats.get("applyTime")))) + "s"
+                                      ));
+
+
+                Double baseeventcount = Double.parseDouble(stagestats.get("eventCount"));
+                if (baseeventcount == 0)
+                    baseeventcount = 1.0;
+
+                println(String.format(statssummformat,
+                                      "Avg time per Event",
+                                      String.format("%.3f",(Double.parseDouble(stagestats.get("extractTime"))/baseeventcount)) + "s",
+                                      String.format("%.3f",(Double.parseDouble(stagestats.get("filterTime"))/baseeventcount)) + "s",
+                                      String.format("%.3f",(Double.parseDouble(stagestats.get("otherTime"))/baseeventcount)) + "s",
+                                      String.format("%.3f",(Double.parseDouble(stagestats.get("applyTime"))/baseeventcount)) + "s",
+                                      String.format("%.3f",(Double.parseDouble(stagestats.get("extractTime")) +
+                                                            Double.parseDouble(stagestats.get("filterTime")) +
+                                                            Double.parseDouble(stagestats.get("otherTime")) +
+                                                            Double.parseDouble(stagestats.get("applyTime")))/baseeventcount) + "s"
+                                      ));
+
+                if (stagestats.containsKey("filterlist"))
+                    println(String.format("%61s | %s","Filters in stage",stagestats.get("filterlist")));
+            }
+    }
+
+    // Wrapper for the QuickStatus operation to handle auto-refresh
+    private void doQuickStatus() throws Exception
+    {
+        String curArg = null;
+        Integer refresh = 0;
+
+        try
+        {
+            while (argvIterator.hasNext())
+            {
+                curArg = argvIterator.next();
+                if ("-r".equals(curArg))
+                    refresh = Integer.parseInt(argvIterator.next());
+                else
+                {
+                    fatal("Unrecognized option: " + curArg, null);
+                }
+            }
+        }
+        catch (ArrayIndexOutOfBoundsException e)
+        {
+            fatal("Missing value for " + curArg, null);
+        }
+
+        if (refresh == 0)
+        {
+            doQuickStatusReal();
+        }
+        else
+        {
+            while(true)
+            {
+                System.out.print("\033[H\033[2J");  
+                System.out.flush();  
+                doQuickStatusReal();
+                Thread.sleep(refresh * 1000);
+            }
+        }
+
+    }
+
+    // Handle a request for quickstatus.
+    // This is designed to output a compressed and human-readable form of the important info
+    // In place of a full dump
+    private void doQuickStatusReal() throws Exception
+    {
+        List<Map<String, String>> propList = new ArrayList<Map<String, String>>();
+
+        propList.add(getOpenReplicator().status());
+
+        Boolean showseq = true;
+
+        for (Map<String, String> props : propList)
+        {
+            showseq = doPrettyState(props);
+
+            if (showseq == true)
+                {
+
+                    if (props.get("role").equals("master"))
+                        {
+                            println("Latency: " + props.get("appliedLatency").toString() + "s from DB commit time on " + props.get("sourceId") + " into THL");
+                            println("         " + props.get("relativeLatency").toString() + "s since last database commit");
+                        }
+                    else if (props.get("role").equals("slave"))
+                        {
+                            println("Latency: " + props.get("appliedLatency").toString() + "s from source DB commit time on " + props.get("pipelineSource") + " into target database");
+                            println("         " + props.get("relativeLatency").toString() + "s since last source commit");
+                        }
+
+                    Integer seqbehind = (Integer.parseInt(props.get("maximumStoredSeqNo")) - 
+                                         Integer.parseInt(props.get("appliedLastSeqno")));
+
+                    Double synctime = (Double.parseDouble(props.get("maximumStoredSeqNo")) - 
+                                      Double.parseDouble(props.get("appliedLastSeqno"))) * 
+                        getTransactionWriteCadence();
+
+                    String synctimestring = "";
+
+                    if (synctime < 91)
+                        synctimestring = String.format("%.2f", synctime) + "s";
+                    else if ((synctime >= 90) && (synctime < (90*60)))
+                        synctimestring = String.format("%.2f", (synctime/60)) + "m";
+                    else if ((synctime >= (90*60)) && (synctime < (90*60*60)))
+                        synctimestring = String.format("%.2f", (synctime/60/60)) + "h";
+                    else
+                        synctimestring = String.format("%.2f", (synctime/60/60/24)) + "d";
+
+                    println("Sequence: " + props.get("appliedLastSeqno").toString() + " last applied, " + 
+                            seqbehind + " transactions behind (" +  
+                            props.get("minimumStoredSeqNo").toString() + "-" +
+                            props.get("maximumStoredSeqNo").toString() + " stored)" + 
+                            " estimate " + synctimestring + " before synchronization");
+                }
+        }
+    }
+
+    private boolean doPrettyState(Map<String, String> props)
+    {
+        String status = props.get("state").toString();
+
+        Boolean showseq = true;
+
+        if (status.equals("ONLINE"))
+            {
+                println("State: " + props.get("serviceName") + " Online for " + props.get("timeInStateSeconds").toString() +
+                        "s, running for " + props.get("uptimeSeconds").toString() +
+                        "s");
+            }
+        else if (status.equals("OFFLINE:NORMAL"))
+            {
+                println("State: Safely Offline for " + props.get("timeInStateSeconds") + "s");
+                showseq = false;
+            }
+        else if (status.equals("OFFLINE:ERROR"))
+            {
+                String mode = "apply";
+                if (props.get("role").equals("master"))
+                    mode = "extract";
+                println("State: " + props.get("serviceName") + " Faulty (Offline) for " + props.get("timeInStateSeconds") + "s\nError Reason: SEQNO " + props.get("pendingErrorSeqno").toString() +
+                        " did not " + mode + "\n    Error: " + props.get("pendingExceptionMessage"));
+                showseq = false;
+            }
+        else if (status.equals("GOING-ONLINE:SYNCHRONIZING"))
+            {
+                if (props.get("role").equals("master"))
+                    {
+                        println("State: " + props.get("serviceName") + " OK, currently waiting for database on " + props.get("sourceId") +
+                                " to become available; waiting for " + props.get("timeInStateSeconds") + "s");
+                    }
+                else
+                    {
+                        println("State: " + props.get("serviceName") + " OK, currently waiting for upstream replicator on " + props.get("pipelineSource") +
+                                " to come oneline; waiting for " + props.get("timeInStateSeconds") + "s");
+                    }
+            }
+        else
+            {
+                println("State: " + props.get("serviceName") + " " + status);
+            }
+        return showseq;
+    }
+
     // Handle a request to show plugin capabilities.
     private void doCapabilities() throws Exception
     {
@@ -1587,7 +2050,7 @@ public class OpenReplicatorManagerCtrl
 
     /**
      * Print properties output.
-     * 
+     *
      * @param json If true, print in JSON format.
      */
     private static void printlnPropList(List<Map<String, String>> propList,
@@ -1665,7 +2128,7 @@ public class OpenReplicatorManagerCtrl
 
     /**
      * Prints properties and values in JSON.
-     * 
+     *
      * @param propIdx Index of the given property map. -1, if it's a single one
      *            only.
      */
@@ -2086,6 +2549,9 @@ public class OpenReplicatorManagerCtrl
         public static final String SETROLE          = "setrole";
         public static final String CLEAR            = "clear";
         public static final String STATS            = "status";
+        public static final String PERF             = "perf";
+        public static final String QUICKSTATS       = "quickstatus";
+        public static final String QUICKSTATSSHORT  = "qs";
         public static final String CLIENTS          = "clients";
         public static final String PROPERTIES       = "properties";
         public static final String HELP             = "help";

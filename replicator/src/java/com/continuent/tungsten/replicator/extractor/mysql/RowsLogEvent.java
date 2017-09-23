@@ -1,6 +1,6 @@
 /**
- * VMware Continuent Tungsten Replicator
- * Copyright (C) 2015 VMware, Inc. All rights reserved.
+ * Tungsten Replicator
+ * Copyright (C) 2015 Continuent Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -840,43 +840,80 @@ public abstract class RowsLogEvent extends LogEvent
                  * 10 bit hour (0-836)<br>
                  * 6 bit minute (0-59)<br>
                  * 6 bit second (0-59)<br>
-                 * 24 bits microseconds (0-999999)<br>
+                 * up to 24 bits microseconds (0-999999)<br>
                  * Total: 48 bits = 6 bytes
                  * Suhhhhhh.hhhhmmmm.mmssssss.ffffffff.ffffffff.ffffffff
                  */
                 if (logger.isDebugEnabled())
                     logger.debug("Extracting TIME2 from position " + rowPos
                             + " : " + hexdump(row, rowPos, 3));
-                long i32 = (BigEndianConversion.convert3BytesToInt(row, rowPos) - 0x800000L) & 0xBFFFFFL;
+                int secPartsLength = getSecondPartsLength(meta);
+                long longMask = 0x800000L;
+                long nanoMask = 0x0L;
+                for (int i = 0; i < secPartsLength; i++)
+                {
+                    longMask = longMask << 8;
+                    nanoMask = nanoMask << 8 | 0xFF;
+                }
+                boolean negative = false;
 
-                long currentValue = (i32 >> 12);
-                int hours = (int) currentValue;
+                long val = BigEndianConversion.convertNBytesToLong(row, rowPos,
+                        3 + secPartsLength);
+                
+                if ((val & longMask) != longMask)
+                {
+                    // First bit means this is a negative time
+                    negative = true;
+                    // Get the 2-complement of it
+                    val = ~val + 1;
+                }
+                // Keep only the 24 first bits (hour / minutes / seconds)
+                long intPart = val >> 8 * secPartsLength;
+
+                // Remove useless bits from the beginning (sign and unused)
+                intPart = intPart & 0x3FFFFFL;
+
+
+                long currentValue = (intPart >> 12);
+                int hours = (int) currentValue * (negative ? -1 : 1);
 
                 long previousValue = currentValue;
-                currentValue = i32 >> 6;
-                int minutes = (int) (currentValue - (previousValue << 6));
+                currentValue = intPart >> 6;
+                int minutes = (int) (currentValue - (previousValue << 6))
+                        * (negative ? -1 : 1);
 
                 previousValue = currentValue;
-                currentValue = i32;
-                int seconds = (int) (currentValue - (previousValue << 6));
+                currentValue = intPart;
+                int seconds = (int) (currentValue - (previousValue << 6))
+                        * (negative ? -1 : 1);
 
-                Time time = java.sql.Time.valueOf(hours + ":" + minutes + ":"
-                        + seconds);
+                // Compute the number of milliseconds of the extracted time
+                long millis = 1000 * (hours * 3600L + minutes * 60L + seconds);
 
-                Timestamp tsVal = new java.sql.Timestamp(time.getTime());
-                value.setValue(tsVal);
-
-                int secPartsLength = getSecondPartsLength(meta);
-                rowPos += 3;
-                int nanoseconds = extractNanoseconds(row, rowPos, meta,
-                        secPartsLength);
-                tsVal.setNanos(nanoseconds);
-
+                Timestamp ts;
+                if (negative)
+                {
+                    // For negatives, substract 1s , as it is otherwise
+                    // impossible to store near-0 negative number.
+                    // This will need to be added back on the applier side
+                    ts = new Timestamp(millis - 1000L);
+                }
+                else
+                {
+                    ts = new Timestamp(millis);
+                }
+                // Now process microseconds (stored into nanoseconds of the timestamp)
+                int nanoseconds = (int)(val & nanoMask);
+                if (nanoseconds > 0)
+                {
+                    ts.setNanos(convertReadValueIntoNanos(meta, nanoseconds));
+                    
+                }
+                value.setValue(ts);
                 if (spec != null)
                     spec.setType(java.sql.Types.TIME);
                 return 3 + secPartsLength;
             }
-
             case MysqlBinlog.MYSQL_TYPE_DATE :
             {
                 int i32 = 0;
@@ -1082,27 +1119,31 @@ public abstract class RowsLogEvent extends LogEvent
             int readValue = BigEndianConversion.convertNBytesToInt(row, rowPos,
                     secPartsLength);
 
-            int i = readValue * 1000;
-            switch (meta)
-            {
-                case 1 :
-                case 2 :
-                    i *= 10000;
-                    break;
-                case 3 :
-                case 4 :
-                    i *= 100;
-                    break;
-                case 5 :
-                case 6 :
-                    break;
-                default :
-                    break;
-            }
-
-            return i;
+            return convertReadValueIntoNanos(meta, readValue);
         }
         return 0;
+    }
+
+    private int convertReadValueIntoNanos(int meta, int readValue)
+    {
+        int i = readValue * 1000;
+        switch (meta)
+        {
+            case 1 :
+            case 2 :
+                i *= 10000;
+                break;
+            case 3 :
+            case 4 :
+                i *= 100;
+                break;
+            case 5 :
+            case 6 :
+                break;
+            default :
+                break;
+        }
+        return i;
     }
 
     private int getSecondPartsLength(int meta)

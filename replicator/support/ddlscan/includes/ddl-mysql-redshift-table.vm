@@ -41,13 +41,13 @@ VARCHAR($varCharLen) /* $col.getTypeDescription() */##
 #elseif ( $col.getTypeDescription().startsWith("CHAR") )
 CHAR($col.getLength())##
 #elseif ( $col.getTypeDescription().startsWith("BINARY") )
-BINARY($col.getLength())##
+CHAR($col.getLength())## /* WARN: MySQL BINARY translated to max CHAR */ ##
 #elseif ( $col.getTypeDescription().startsWith("VARBINARY") )
-VARBINARY($col.getLength())##
+VARCHAR($col.getLength())## /* WARN: MySQL VARBINARY translated to max VARCHAR */ ##
 #elseif ( $col.getTypeDescription().contains("TEXT") )## TINYTEXT, TEXT, MEDIUMTEXT, LONGTEXT
 VARCHAR(65535) /* WARN: MySQL $col.getTypeDescription() translated to max VARCHAR */##
 #elseif ( $col.getTypeDescription().contains("BLOB") )## TINYBLOB, BLOB, MEDIUMBLOB, LONGBLOB
-VARBINARY(65000) /* WARN: MySQL BLOB translated to max VARBINARY */ ##
+VARCHAR(65000) /* WARN: MySQL BLOB translated to max VARCHAR */ ##
 #elseif ( $col.getTypeDescription().startsWith("FLOAT") )
 FLOAT##
 #elseif ( $col.getTypeDescription().startsWith("DOUBLE") )

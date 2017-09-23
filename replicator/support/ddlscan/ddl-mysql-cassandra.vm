@@ -1,6 +1,6 @@
 #*
-	VMware Continuent Tungsten Replicator
-	Copyright (C) 2015 VMware, Inc. All rights reserved.
+	Tungsten Replicator
+	Copyright (C) 2015 Continuent Ltd. All rights reserved.
 
 	Licensed under the Apache License, Version 2.0 (the "License");
 	you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@
 	See the License for the specific language governing permissions and
 	limitations under the License.
 
-	Initial developer(s): MC Brown
-	Contributor(s): 
+	Initial developer(s): Linas Virbalas, Robert Hodges
+	Contributor(s): MC Brown
 
 	Velocity template for Tungsten.
 
@@ -23,7 +23,7 @@
 ## Print header or help above the first table.
 #if ( $counter == 1 )
 #if( $help )
-Transforms Oracle table definition (DDL) to equivalent Vertica
+Transforms MySQL table definition (DDL) to equivalent Vertica
 base tables.  Reports errors (ERROR) and warnings (WARN).  Column
 mappings generally map to those used by Tungsten Replicator.
 
@@ -34,7 +34,9 @@ Notes:
     may not be the optimal approach in all cases.
 #else
 #parse("includes/ddl-header.vm")
-CREATE SCHEMA "$table.getSchema()"##
+CREATE KEYSPACE IF NOT EXISTS "$table.getSchema()"## 
+ WITH REPLICATION = { ##
+      'class' : 'SimpleStrategy', 'replication_factor' : 3 } ##
 ;
 #end
 #end
@@ -63,71 +65,62 @@ CREATE TABLE ##
 ## Print column name. 
   "$col.getName()" ##
 ### Add datatype specification. 
-#if ( $col.getTypeDescription().contains("TIMESTAMP") )
+#if ( $col.getTypeDescription().contains("DATETIME"))
+TIMESTAMP##
+#elseif ( $col.getTypeDescription().contains("TIMESTAMP") )
 TIMESTAMP##
 #elseif ( $col.getTypeDescription().contains("DATE") )
 DATE##
-#elseif ( $col.getTypeDescription().startsWith("BINARY_DOUBLE") )
-DOUBLE PRECISION##
-#elseif ( $col.getTypeDescription().startsWith("BINARY_FLOAT") )
-FLOAT##
-#elseif ( $col.getTypeDescription().startsWith("NUMBER") )## NUMBER(p,s)
-$col.getTypeDescription().replaceFirst("NUMBER","NUMBER").replaceFirst(" UNSIGNED","")##
-#elseif ( $col.getTypeDescription().equals("DECIMAL") )
-if ( $col.getLength() > 30)
-DECIMAL($col.getLength(),30)##
-#else
-DECIMAL($col.getLength(),$col.getLength())##
-#end
+#elseif ( $col.getTypeDescription().contains("YEAR") )
+DECIMAL##
+#elseif ( $col.getTypeDescription().contains("TIME") )
+TIME##
+#elseif ( $col.getTypeDescription().startsWith("TINYINT") )
+INT##
+#elseif ( $col.getTypeDescription().startsWith("SMALLINT") )
+INT##
+#elseif ( $col.getTypeDescription().startsWith("MEDIUMINT") )
+INT##
+#elseif ( $col.getTypeDescription().startsWith("INT") )
+INT##
+#elseif ( $col.getTypeDescription().startsWith("BIGINT") )
+BIGINT##
+#elseif ( $col.getTypeDescription().startsWith("DECIMAL(") )## DECIMAL(p,s)
+DECIMAL##
 #elseif ( $col.getTypeDescription().startsWith("VARCHAR") )
-VARCHAR($col.getLength())##
-#elseif ( $col.getTypeDescription().startsWith("NVARCHAR") )
-VARCHAR($col.getLength())##
+TEXT##
 #elseif ( $col.getTypeDescription().startsWith("CHAR") )
-CHAR($col.getLength())##
-#elseif ( $col.getTypeDescription().startsWith("NCHAR") )
-CHAR($col.getLength())##
-#elseif ( $col.getTypeDescription().startsWith("ROWID") )
-CHAR(20)##
-#elseif ( $col.getTypeDescription().startsWith("UROWID") )
-VARBINARY(3950)##
-#elseif ( $col.getTypeDescription().startsWith("LONG") )
-VARBINARY(65000)##  /* WARN: Oracle LONG translated to max VARBINARY */ ##
-#elseif ( $col.getTypeDescription().startsWith("RAW") )
-#if ( $col.getLength() <= 65000 )
-VARBINARY($col.getLength())##
-#{else}VARBINARY(650000)##  /* WARN: Oracle RAW translated to max VARBINARY */ ##
-#end
-#elseif ( $col.getTypeDescription().startsWith("LONG RAW") )
-#if ( $col.getLength() <= 65000 )
-VARBINARY($col.getLength())##
-#{else}VARBINARY(650000)##  /* WARN: Oracle LONG RAW translated to max VARBINARY */ ##
-#end
-#elseif ( $col.getTypeDescription().contains("BLOB") )
-VARBINARY(65000) /* WARN: Oracle BLOB translated to max VARBINARY */ ##
-#elseif ( $col.getTypeDescription().contains("BFILE") )
-VARBINARY(65000) /* WARN: Oracle BFILE translated to max VARBINARY */ ##
-#elseif ( $col.getTypeDescription().contains("CLOB") )
-VARBINARY(65000) /* WARN: Oracle CLOB translated to max VARBINARY */ ##
-#elseif ( $col.getTypeDescription().contains("NCLOB") )
-VARBINARY(65000) /* WARN: Oracle NCLOB translated to max VARBINARY */ ##
+TEXT##
+#elseif ( $col.getTypeDescription().startsWith("BINARY") )
+BLOB##
+#elseif ( $col.getTypeDescription().startsWith("VARBINARY") )
+BLOB##
+#elseif ( $col.getTypeDescription().contains("TEXT") )## TINYTEXT, TEXT, MEDIUMTEXT, LONGTEXT
+TEXT##
+#elseif ( $col.getTypeDescription().contains("BLOB") )## TINYBLOB, BLOB, MEDIUMBLOB, LONGBLOB
+TEXT##
 #elseif ( $col.getTypeDescription().startsWith("FLOAT") )
 FLOAT##
-#elseif ( $col.getTypeDescription().startsWith("INTERVAL") )
-CHAR(40)##
+#elseif ( $col.getTypeDescription().startsWith("DOUBLE") )
+DOUBLE##
+#elseif ( $col.getTypeDescription().startsWith("ENUM") )
+TEXT##
+#elseif ( $col.getTypeDescription().startsWith("SET") )
+TEXT##
+#elseif ( $col.getTypeDescription().equals("BIT(1)") )
+BOOLEAN /* $col.getTypeDescription() */##
+#elseif ( $col.getTypeDescription().startsWith("BIT") )
+TEXT## /* WARN: Converted BIT to CHAR */##
 #else
-
-
 $col.getTypeDescription() /* ERROR: unrecognized (type=$col.getType(), length=$col.getLength()) */##
 #end ## End of if-then-then...-else.
 #end ## End of column loop. 
-) ##
 
 #set ( $tryPkInclude = "${table.getSchema()}.${table.getName()}.pk" )
 #set ( $tryInclude = "${table.getSchema()}.${table.getName()}.ddl" )
 ## Primary key.
 #if ( $table.getPrimaryKey() )
-  ORDER BY ##
+      , primary key (##
 #foreach ( $key in $table.getPrimaryKey().getColumns() )
 "$key.getName()"##
 #if( $foreach.hasNext ), #else #end
@@ -149,5 +142,5 @@ $col.getTypeDescription() /* ERROR: unrecognized (type=$col.getType(), length=$c
 #include($tryInclude)
   /* END OF $tryInclude */##
 #end
-
+))
 ;

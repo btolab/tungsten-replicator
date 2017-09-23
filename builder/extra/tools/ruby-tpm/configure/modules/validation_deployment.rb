@@ -86,6 +86,7 @@ class SSHLoginCheck < ConfigureValidationCheck
           error "SSH to #{@config.getProperty(HOST)} as #{@config.getProperty(USERID)} is returning more than one line."
           help "Ensure that the .bashrc and .bash_profile files are not printing messages on #{@config.getProperty(HOST)} with out using a test like this. if [ \"$PS1\" ]; then echo \"Your message here\"; fi"
           help "If you are using the 'Banner' argument in /etc/ssh/sshd_config, try putting the contents into /etc/motd"
+          help "Confirm that the remote host/user does not have a shell trap set for the logout signal (0)"
       else
         error "Unable to SSH to #{@config.getProperty(HOST)} as #{@config.getProperty(USERID)}."
         
@@ -350,6 +351,14 @@ class RubyVersionCheck < ConfigureValidationCheck
       debug "Ruby version (#{ruby_version}) OK"
     elsif ruby_version =~ /^2\.0/
       debug "Ruby version (#{ruby_version}) OK"
+    elsif ruby_version =~ /^2\.1/
+      debug "Ruby version (#{ruby_version}) OK"
+    elsif ruby_version =~ /^2\.2/
+      debug "Ruby version (#{ruby_version}) OK"
+    elsif ruby_version =~ /^2\.3/
+      debug "Ruby version (#{ruby_version}) OK"
+    elsif ruby_version =~ /^2\.4/
+      debug "Ruby version (#{ruby_version}) OK"
     else
       error "Unrecognizable Ruby version: #{ruby_version}"
     end
@@ -389,6 +398,8 @@ class OSCheck < ConfigureValidationCheck
     uname_m = cmd_result("uname -m")
     arch = case
     when uname_m == "x86_64" then OS_ARCH_64
+    when uname_m == "i86pc" then OS_ARCH_64
+    when uname_m =~ /sun/ then OS_ARCH_64
     when uname_m == "i386" then OS_ARCH_32
     when uname_m == "i686" then OS_ARCH_32
     else
@@ -460,10 +471,10 @@ class OpenFilesLimitCheck < ConfigureValidationCheck
   
   def validate
     begin
-      limit = Process.getrlimit(Process::RLIMIT_NOFILE)[0]
-    
-      if limit.to_i < 65535
-        warning("The open file limit is set to #{limit}, we suggest a value of 65535. Add '*       -    nofile  65535' to your /etc/security/limits.conf and restart your session")
+      limit = IO.popen("LANG=en_US;export LANG; ulimit -n"){ |f| f.readlines.join }
+      limit = limit.strip! || limit 
+      if limit.to_i < 65535 and (limit != "unlimited")
+        warning("The open file limit is set to '#{limit}', we suggest a value of 65535. Add '*       -    nofile  65535' to your /etc/security/limits.conf and restart your session")
       else
         info("The open files limit is set to #{limit}")
       end
@@ -737,9 +748,9 @@ class UpgradeSameProductCheck < ConfigureValidationCheck
       rescue CommandError
         # This logic will work for old versions
         if File.exist?(current_dir + "/tungsten-manager") == true
-          current_product_name = PRODUCT_VMWARE_CLUSTERING
+          current_product_name = PRODUCT_CONTINUENT_CLUSTERING
         else
-          current_product_name = PRODUCT_VMWARE_REPLICATION
+          current_product_name = PRODUCT_CONTINUENT_REPLICATION
         end
       end
       
@@ -1632,7 +1643,7 @@ class MissingReplicationServiceConfigurationCheck < ConfigureValidationCheck
   
   def validate
     existing_static_files = {}
-    Dir.glob("#{@config.getProperty(CURRENT_RELEASE_DIRECTORY)}/tungsten-replicator/conf/static-*") {
+    Dir.glob("#{@config.getProperty(CURRENT_RELEASE_DIRECTORY)}/tungsten-replicator/conf/static-*.properties") {
       |fname|
       existing_static_files[File.basename(fname)] = true
     }
@@ -1688,7 +1699,7 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
     else
       connector_ssl_enabled = false
     end
-    
+
     if ssl_enabled == true
       ks_path = @config.getProperty(JAVA_KEYSTORE_PATH).to_s()
       ts_path = @config.getProperty(JAVA_TRUSTSTORE_PATH).to_s()
@@ -1700,31 +1711,31 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
         validate_tls_keystore()
       end
     end
-    
+
     if @config.getProperty(ENABLE_JGROUPS_SSL) == "true"
       validate_jgroups_keystore()
     end
-    
+
     if connector_ssl_enabled == true
       validate_complete_connector_keystore()
       validate_complete_connector_truststore()
     end
   end
-  
+
   def validate_keystore_alias(store_path, store_password, key_alias, key_password, store_type = JavaKeytool::TYPE_JKS)
     keystore = JavaKeytool.new(store_path, store_type)
     keystore.test_key_password(store_password, key_alias, key_password)
-    
+
     return true
   end
-  
+
   def validate_keystore(store_path, store_password, store_type = JavaKeytool::TYPE_JKS)
     keystore = JavaKeytool.new(store_path, store_type)
     keystore.count(store_password)
-    
+
     return true
   end
-  
+
   def validate_tls_keystore
     key = JAVA_TLS_KEYSTORE_PATH
     keystore_path = @config.getProperty(key).to_s()
@@ -1732,13 +1743,13 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
       keystore_path = @config.getTemplateValue(key).to_s()
       if keystore_path != ""
         unless File.exists?(keystore_path)
-          # Reset the keystore path since we should treat 
+          # Reset the keystore path since we should treat
           # this as if the argument is not set
           keystore_path = ""
         end
       end
     end
-    
+
     if keystore_path != ""
       password = @config.getProperty(JAVA_KEYSTORE_PASSWORD)
       tls_alias = @config.getProperty(JAVA_TLS_ENTRY_ALIAS)
@@ -1751,7 +1762,7 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
       error("Encryption of cluster communications is enabled but no certificate has been provided. Specify a TLS keystore using --java-tls-keystore-path or include '--replace-tls-certificate' in the `tpm update` command. You may disable this encryption by adding '--disable-security-controls=true'.")
     end
   end
-  
+
   def validate_jgroups_keystore
     key = JAVA_JGROUPS_KEYSTORE_PATH
     keystore_path = @config.getProperty(key).to_s()
@@ -1759,13 +1770,13 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
       keystore_path = @config.getTemplateValue(key).to_s()
       if keystore_path != ""
         unless File.exists?(keystore_path)
-          # Reset the keystore path since we should treat 
+          # Reset the keystore path since we should treat
           # this as if the argument is not set
           keystore_path = ""
         end
       end
     end
-    
+
     if keystore_path.to_s() != ""
       password = @config.getProperty(JAVA_KEYSTORE_PASSWORD)
       jgroups_alias = @config.getProperty(JAVA_JGROUPS_ENTRY_ALIAS)
@@ -1778,7 +1789,7 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
       error("Encryption of JGroups data is enabled but no certificate has been provided. Specify a JGroups keystore using --java-jgroups-keystore-path or include '--replace-jgroups-certificate' in the `tpm update` command. You may disable this encryption by adding '--disable-security-controls=true'.")
     end
   end
-  
+
   def validate_complete_keystore
     keystore_path = @config.getProperty(JAVA_KEYSTORE_PATH)
     if keystore_path.to_s() == ""
@@ -1797,7 +1808,7 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
       end
     end
   end
-  
+
   def validate_complete_truststore
     truststore_path = @config.getProperty(JAVA_TRUSTSTORE_PATH)
     if truststore_path.to_s() == ""
@@ -1805,7 +1816,7 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
         truststore_path = @config.getTemplateValue(JAVA_TRUSTSTORE_PATH)
       end
     end
-  
+
     if truststore_path.to_s() != ""
       password = @config.getProperty(JAVA_TRUSTSTORE_PASSWORD)
       tls_alias = @config.getProperty(JAVA_TLS_ENTRY_ALIAS)
@@ -1816,8 +1827,14 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
       end
     end
   end
-  
+
   def validate_complete_connector_keystore
+    begin
+      keytool_path = which("keytool")
+    rescue CommandError
+      keytool_path = nil
+    end
+
     keystore_path = @config.getProperty(JAVA_CONNECTOR_KEYSTORE_PATH)
     if keystore_path.to_s() == ""
       if File.exist?(@config.getTemplateValue(JAVA_CONNECTOR_KEYSTORE_PATH))
@@ -1826,7 +1843,7 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
         error("Unable to find #{@config.getTemplateValue(JAVA_CONNECTOR_KEYSTORE_PATH)} for use with Connector SSL encryption. You must create the file or provide a path to it with --java-connector-keystore-path.")
       end
     end
-  
+
     if keystore_path.to_s() != "" && keytool_path != nil
       begin
         cmd_result("keytool -list -keystore #{keystore_path} -storepass #{@config.getProperty(JAVA_CONNECTOR_KEYSTORE_PASSWORD)}")
@@ -1835,8 +1852,14 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
       end
     end
   end
-  
+
   def validate_complete_connector_truststore
+    begin
+      keytool_path = which("keytool")
+    rescue CommandError
+      keytool_path = nil
+    end
+
     truststore_path = @config.getProperty(JAVA_CONNECTOR_TRUSTSTORE_PATH)
     if truststore_path.to_s() == ""
       if File.exist?(@config.getTemplateValue(JAVA_CONNECTOR_TRUSTSTORE_PATH))
@@ -1845,7 +1868,7 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
         error("Unable to find #{@config.getTemplateValue(JAVA_CONNECTOR_TRUSTSTORE_PATH)} for use with SSL encryption. You must create the file or provide a path to it with --java-connector-truststore-path.")
       end
     end
-  
+
     if truststore_path.to_s() != "" && keytool_path != nil
       begin
         cmd_result("keytool -list -keystore #{truststore_path} -storepass #{@config.getProperty(JAVA_CONNECTOR_TRUSTSTORE_PASSWORD)}")
@@ -1878,14 +1901,14 @@ class HostLicensesCheck < ConfigureValidationCheck
   include ClusterHostCheck
 
   def set_vars
-    @title = "Check for VMware Continuent licenses"
+    @title = "Check for Tungsten licenses"
   end
 
   def validate
     @has_licenses = false
     @has_invalid_licenses = false
     @trial_license_found = false
-    
+
     licenses = @config.getProperty(HOST_LICENSES)
     if licenses.is_a?(Array)
       if licenses.size() > 0
@@ -1905,25 +1928,25 @@ class HostLicensesCheck < ConfigureValidationCheck
         @has_invalid_licenses = true
       end
     end
-    
+
     if @has_licenses == true
       if @has_invalid_licenses == true
-        error("There are problems with some of your licenses. Use a proper VMware V8 license for Continuent or temporarily enable trial-mode by using '#{LICENSE_TRIAL}'. The trial-mode does not have any runtime limitations at this time but may affect your ability to get rapid support if there are questions about your license.")
+        error("There are problems with some of your licenses. Use a proper Continuent V8 license for Continuent or temporarily enable trial-mode by using '#{LICENSE_TRIAL}'. The trial-mode does not have any runtime limitations at this time but may affect your ability to get rapid support if there are questions about your license.")
       end
-      
+
       if @trial_license_found == true
         warning("You have trial-mode enabled. It does not have any runtime limitations at this time but may affect your ability to get rapid support if there are questions about your license.")
       end
     else
       search_paths = @config.getProperty(HOST_LICENSE_PATHS)
       if search_paths.is_a?(Array)
-        warning("Unable to find licenses for this host in any of the following locations: #{search_paths.join(', ')}. Place your VMware Continuent license key into one of the paths listed on every host.")
+        warning("Unable to find licenses for this host in any of the following locations: #{search_paths.join(', ')}. Place your Tungsten license key into one of the paths listed on every host.")
       else
         warning("Unable to find licenses for this host.")
       end
     end
   end
-  
+
   def validate_license(license)
     # The regex matches values like ABCD1-FGHI2-KLMN3-PQRS4-UVWX5
     if license == LICENSE_TRIAL
@@ -1935,12 +1958,12 @@ class HostLicensesCheck < ConfigureValidationCheck
       return false
     end
   end
-  
+
   def enabled?
-    if Configurator.instance.is_open_source?()
+    #if Configurator.instance.is_open_source?()
       false
-    else
-      super()
-    end
+    #else
+    #  super()
+    #end
   end
 end
