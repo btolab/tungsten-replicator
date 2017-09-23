@@ -31,7 +31,7 @@ import com.continuent.tungsten.replicator.ReplicatorException;
  * <li>XID - a unique transaction ID. XIDs have a hex-numeric format like
  * 001.002.033404. As explained below this may have a prefix in some cases.</li>
  * <li>changeSeq - the ID of successive LCRs in the same transaction. The last
- * LCR in sequence is labeled “LAST."</li>
+ * LCR in sequence is labeled "LAST."</li>
  * <li>startScn - the starting SCN, assigned by Oracle when the transaction
  * starts.</li>
  * <li>startPlog - the oldest active plog at the time this transaction commits

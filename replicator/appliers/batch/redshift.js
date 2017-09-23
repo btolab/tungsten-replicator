@@ -32,7 +32,7 @@ var filter;
 function readAWSConfigFile()
 {
   var awsConfigFileName = "s3-config-" + serviceName + ".json";
-  var awsConfigFile = "../../../../share/" + awsConfigFileName;
+  var awsConfigFile = "../../share/" + awsConfigFileName;
   var f = new java.io.File(awsConfigFile);
   if (!f.isFile())
   {
