@@ -98,6 +98,6 @@ Active communities contribute code and we're happy to consider yours. To be invo
 ##10 PROBLEMS
 
 This is open source software. Check the wiki, issues list, and mailing lists to get help.  
-VMware also offers commercial products based on Tungsten Replicator.  See the 
+Continuent also offers commercial products based on Tungsten Replicator.  See the 
 [Continuent](http://www.continuent.com/solutions) 
 products page for more information. 
