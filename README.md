@@ -1,11 +1,27 @@
 #TUNGSTEN REPLICATOR
-Copyright (C) 2015 VMware, Inc. -- Updated 8 December 2016
+Copyright (C) 2015 VMware, Inc. -- Updated 13th October 2017
 
 ##1 INTRODUCTION
 
 Tungsten Replicator is an open source replication engine supporting a variety of different extractor and applier modules. 
-Data can be extracted from MySQL, Oracle and Amazon RDS, and applied to transactional stores, including MySQL, Oracle, and 
-Amazon RDS; NoSQL stores such as MongoDB, and datawarehouse stores such as Vertica, Hadoop, and Amazon RDS.  
+Data can be extracted from MySQL, Oracle and Amazon RDS, and applied to transactional stores.
+
+Tungsten Replicator supports extraction from:
+
+* MySQL 5.0-5.6, 5.7 (with limited datatype support)
+* Amazon RDS for MySQL
++ Oracle 10g, 11g using CDC
+
+Data can be applied to:
+
+* MySQL
+* Amazon RDS for MySQL
+* Oracle
+* MongoDB
+* HPE Vertica
+* Hadoop (HDFS/Hive)
+* Amazon RedShift
+* Apache Cassandra
 
 During replication, Tungsten Replication assigns data a unique global transaction ID, and enables flexible statement 
 and/or row-based replication of data. This enables data to be exchanged between different databases and different database 
@@ -40,7 +56,7 @@ Currently there are no builds from the new code available, they will be made ava
 
 ##5 DOCUMENTATION
 
-Documentation for Tungsten Replicator is located [on the Continuent Documentation website](http://docs.continuent.com/tungsten-replicator-5.0-oss/index.html).
+Documentation for Tungsten Replicator is located [on the Continuent Documentation website](http://docs.continuent.com/tungsten-replicator-5.2-oss/index.html).
 
 ##6 INSTALLATION
 
@@ -72,8 +88,8 @@ tastes.  It screws up merges and we have been using them for about a decade.)
 Tungsten Replicator is supported by an active community.  You can find us in the following places. 
 
 * [Google Group discussion on Tungsten Replicator](http://groups.google.com/group/tungsten-replicator-discuss)
-* Blogs, especially: [The Data Charmer](http://datacharmer.blogspot.com/), 
-  and [The Scale Out Blog](http://scale-out-blog.blogspot.com/), and [MCslp Blog](http://mcslp.com)
+* Blogs, especially: [MCB Guru Blog](http://mcb.guru), [Continuent Blog](https://www.continuent.com/blog/)
+* Older Blogs: [The Data Charmer](http://datacharmer.blogspot.com/), and [The Scale Out Blog](http://scale-out-blog.blogspot.com/), and 
 
 ##9 CONTRIBUTIONS
 
