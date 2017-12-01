@@ -141,6 +141,7 @@ public class TableMapLogEvent extends LogEvent
             {
                 case MysqlBinlog.MYSQL_TYPE_TINY_BLOB :
                 case MysqlBinlog.MYSQL_TYPE_BLOB :
+                case MysqlBinlog.MYSQL_TYPE_JSON :
                 case MysqlBinlog.MYSQL_TYPE_MEDIUM_BLOB :
                 case MysqlBinlog.MYSQL_TYPE_LONG_BLOB :
                 case MysqlBinlog.MYSQL_TYPE_DOUBLE :
