@@ -31,7 +31,7 @@ INT##
 #elseif ( $col.getTypeDescription().startsWith("BIGINT") )
 BIGINT##
 #elseif ( $col.getTypeDescription().startsWith("DECIMAL(") )
-$col.getTypeDescription()##
+$col.getTypeDescription().replaceFirst(" UNSIGNED","")##
 #elseif ( $col.getTypeDescription().startsWith("VARCHAR") )
 #set ( $varCharLen = $col.getLength() * 4 )
 #if ( $varCharLen <= 65000 )
