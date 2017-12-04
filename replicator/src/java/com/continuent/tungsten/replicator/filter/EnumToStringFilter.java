@@ -327,19 +327,18 @@ public class EnumToStringFilter implements Filter
     public static String[] parseListDefString(String colType, String definition)
     {
         // Parse out what's inside brackets.
-        String keyword = colType + "(";
+        String keyword = colType + "('";
         int iA = definition.toLowerCase().indexOf(keyword);
-        int iB = definition.lastIndexOf(')');
+        int iB = definition.lastIndexOf("')");
         String list = definition.substring(iA + keyword.length(), iB);
 
         // Split by comma, remove quotes and save into array.
-        String[] listArray = list.split(",");
+        String[] listArray = list.split("','");
         String[] elements = new String[listArray.length];
         for (int i = 0; i < listArray.length; i++)
         {
             String elementQuoted = listArray[i];
-            String element = elementQuoted.substring(1,
-                    elementQuoted.length() - 1);
+            String element = elementQuoted == "''" ? "'" : elementQuoted;
             elements[i] = element;
         }
 
