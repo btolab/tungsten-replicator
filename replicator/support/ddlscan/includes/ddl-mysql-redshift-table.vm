@@ -23,11 +23,19 @@ VARCHAR(17) /* WARN: no pure TIME type in Redshift */##
 #elseif ( $col.getTypeDescription().startsWith("TINYINT") )
 SMALLINT /* $col.getTypeDescription() */##
 #elseif ( $col.getTypeDescription().startsWith("SMALLINT") )
+#if ( $col.getTypeDescription().contains("UNSIGNED") )
+INT /* $col.getTypeDescription() */##
+#else
 SMALLINT##
+#end
 #elseif ( $col.getTypeDescription().startsWith("MEDIUMINT") )
 INT /* $col.getTypeDescription() */##
 #elseif ( $col.getTypeDescription().startsWith("INT") )
+#if ( $col.getTypeDescription().contains("UNSIGNED") )
+BIGINT /* $col.getTypeDescription() */##
+#else
 INT##
+#end
 #elseif ( $col.getTypeDescription().startsWith("BIGINT") )
 BIGINT##
 #elseif ( $col.getTypeDescription().startsWith("DECIMAL(") )
