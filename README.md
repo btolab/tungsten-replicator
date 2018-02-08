@@ -1,5 +1,4 @@
 #TUNGSTEN REPLICATOR
-Copyright (C) 2015 VMware, Inc. -- Updated 13th October 2017
 
 ##1 INTRODUCTION
 
@@ -101,3 +100,6 @@ This is open source software. Check the wiki, issues list, and mailing lists to 
 Continuent also offers commercial products based on Tungsten Replicator.  See the 
 [Continuent](http://www.continuent.com/solutions) 
 products page for more information. 
+
+Copyright (C) 2015 VMware, Inc. -- Updated 13th October 2017
+
