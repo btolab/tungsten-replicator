@@ -1,7 +1,7 @@
 
 # TUNGSTEN REPLICATOR
 
-##1 INTRODUCTION
+## 1 INTRODUCTION
 
 Tungsten Replicator is an open source replication engine supporting a variety of different extractor and applier modules. 
 Data can be extracted from MySQL, Oracle and Amazon RDS, and applied to transactional stores.
@@ -35,7 +35,7 @@ This repo tracks the Tungsten Replicator 5.0 series.
 
 This software is released under the Apache 2.0 license, a copy of which is located in the LICENSE file.  
 
-##3 BUILDING
+## 3 BUILDING
 
 To build a replicator, follow the steps shown below to obtain the source and build. 
 
@@ -50,15 +50,15 @@ To build successfully you will require the following prerequisite software:
 * JDK 7 or higher
 * Ant 1.8 or higher
 
-##4 DOWNLOADS
+## 4 DOWNLOADS
 
 Currently there are no builds from the new code available, they will be made available as soon as possible.
 
-##5 DOCUMENTATION
+## 5 DOCUMENTATION
 
 Documentation for Tungsten Replicator is located [on the Continuent Documentation website](http://docs.continuent.com/tungsten-replicator-5.2-oss/index.html).
 
-##6 INSTALLATION
+## 6 INSTALLATION
 
 To install the replicator follow the steps shown below. 
 
@@ -71,7 +71,7 @@ To install the replicator follow the steps shown below.
 The Installation Guide provides additional information on installation
 procedures. 
 
-##7 DEVELOPMENT
+## 7 DEVELOPMENT
 
 Most of us use Eclipse for replicator.  Here's how to get started. 
 
@@ -83,7 +83,7 @@ Eclipse code and comment formatting definitions are located in commons/eclipse-s
 See the README.txt for instructions on importing.  (And no, we don't plan on changing them to suit anyone's individual 
 tastes.  It screws up merges and we have been using them for about a decade.)
 
-##8 COMMUNITY
+## 8 COMMUNITY
 
 Tungsten Replicator is supported by an active community.  You can find us in the following places. 
 
@@ -91,11 +91,11 @@ Tungsten Replicator is supported by an active community.  You can find us in the
 * Blogs, especially: [MCB Guru Blog](http://mcb.guru), [Continuent Blog](https://www.continuent.com/blog/)
 * Older Blogs: [The Data Charmer](http://datacharmer.blogspot.com/), and [The Scale Out Blog](http://scale-out-blog.blogspot.com/), and 
 
-##9 CONTRIBUTIONS
+## 9 CONTRIBUTIONS
 
 Active communities contribute code and we're happy to consider yours. To be involved, please email [MC Brown](mailto:mc.brown@continuent.com)
 
-##10 PROBLEMS
+## 10 PROBLEMS
 
 This is open source software. Check the wiki, issues list, and mailing lists to get help.  
 Continuent also offers commercial products based on Tungsten Replicator.  See the 
