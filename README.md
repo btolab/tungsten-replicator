@@ -6,6 +6,8 @@
 Tungsten Replicator is an open source replication engine supporting a variety of different extractor and applier modules. 
 Data can be extracted from MySQL, Oracle and Amazon RDS, and applied to transactional stores.
 
+For more information Tungsten Replicator, including licensing and support options, see [Tungsten Replicator](http://tungsten-replicator.com)
+
 Tungsten Replicator supports extraction from:
 
 * MySQL 5.0-5.6, 5.7 (with limited datatype support)
@@ -101,6 +103,4 @@ This is open source software. Check the wiki, issues list, and mailing lists to 
 Continuent also offers commercial products based on Tungsten Replicator.  See the 
 [Continuent](http://www.continuent.com/solutions) 
 products page for more information. 
-
-Copyright (C) 2015 VMware, Inc. -- Updated 13th October 2017
 
